@@ -1,0 +1,23 @@
+aws_region           = "us-east-1"
+project_name         = "radiologyos"
+environment          = "dev"
+documents_bucket_name = "radiologyos-old-reports-change-me"
+vector_bucket_name    = "radiologyos-vectors-change-me"
+vector_index_name     = "radiology-report-index"
+embedding_model_arn   = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0"
+generation_model_arn  = "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0"
+vector_dimension      = 1024
+chunk_max_tokens      = 400
+chunk_overlap_percentage = 15
+enable_cognito_mfa    = false
+db_publicly_accessible = false
+dev_client_cidr        = ""
+db_backup_retention_period = 0
+db_instance_class = "db.t3.micro"
+
+# Optional: ARN returned for your IAM user by STS. Enables local AssumeRole;
+# credentials remain in the AWS CLI profile, never in Terraform variables.
+local_developer_principal_arn = ""
+
+# Set a unique name only when db_skip_final_snapshot = false.
+db_final_snapshot_identifier = null

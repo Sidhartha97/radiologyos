@@ -1,0 +1,9 @@
+.loading-spinner { flex-shrink:0; animation:loading-rotate .85s linear infinite; }
+@keyframes loading-rotate { to { transform:rotate(360deg); } }
+.loading-status { display:flex; align-items:center; justify-content:center; gap:10px; padding:18px; color:#426487; }
+button[aria-busy="true"] { display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:wait; }
+button:disabled { cursor:not-allowed; opacity:.58; }
+.app-refresh { position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:100; background:white; border:1px solid #dce5f1; border-radius:24px; box-shadow:0 4px 16px #14305218; padding:9px 16px; }
+.action-error { color:#a32032; background:#fff3f4; border:1px solid #f3cbd1; border-radius:8px; padding:12px; }
+.editor-pane[data-busy="true"] .toolbar,.editor-pane[data-busy="true"] .template-bar { pointer-events:none; opacity:.65; }
+@media (prefers-reduced-motion:reduce) { .loading-spinner { animation:none; } }

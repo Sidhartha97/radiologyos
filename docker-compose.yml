@@ -1,0 +1,41 @@
+services:
+  radiologyos:
+    env_file:
+      - path: .env.txt
+        required: false
+      - path: .env
+        required: false
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: radiologyos
+    ports:
+      - "8000:8000"
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      AWS_PROFILE: ${AWS_PROFILE:-dev}
+      AWS_RAG_ENABLED: ${AWS_RAG_ENABLED:-true}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      LLM_PROVIDER: ${LLM_PROVIDER:-bedrock}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      RAG_S3_BUCKET: ${RAG_S3_BUCKET:-}
+      RAG_S3_PREFIX: ${RAG_S3_PREFIX:-old-reports/}
+      RAG_FINAL_REPORTS_PREFIX: ${RAG_FINAL_REPORTS_PREFIX:-final-reports/}
+      RAG_AUTO_INGEST_FINAL: ${RAG_AUTO_INGEST_FINAL:-true}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-development}
+      BEDROCK_KNOWLEDGE_BASE_ID: ${BEDROCK_KNOWLEDGE_BASE_ID:-}
+      BEDROCK_DATA_SOURCE_ID: ${BEDROCK_DATA_SOURCE_ID:-}
+      BEDROCK_FINAL_DATA_SOURCE_ID: ${BEDROCK_FINAL_DATA_SOURCE_ID:-}
+      BEDROCK_MODEL_ARN: ${BEDROCK_MODEL_ARN:-}
+      RAG_KMS_KEY_ID: ${RAG_KMS_KEY_ID:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+      DYNAMODB_TABLE: ${DYNAMODB_TABLE:-radiologyos-dev}
+    volumes:
+      - radiologyos-data:/app/uploads
+      # Local development only: lets boto3 use the configured AWS CLI profile.
+      - ${USERPROFILE}/.aws:/home/appuser/.aws:ro
+
+volumes:
+  radiologyos-data:
