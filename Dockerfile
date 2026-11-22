@@ -1,4 +1,6 @@
-FROM node:22-alpine AS frontend-build
+# Build static frontend assets on the runner's native architecture. Node/npm
+# under QEMU ARM emulation can terminate with SIGILL during npm ci.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-build
 
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
