@@ -48,7 +48,7 @@ export default function AccountCreation({ onCreated, demoMode = false }: { onCre
       if (!response.ok) throw new Error(result.error || 'Could not deliver invitation.')
       await load()
       if (result.status === 'FAILED') throw new Error(`Invitation failed (${result.errorCode || 'ProvisioningFailed'}). Check Cognito email delivery, app permissions and the user-pool configuration, then retry.`)
-      setSuccess(demoMode ? `Local invitation ready for ${invitation.email}. No email was sent; use the demo password to sign in.` : `Account invitation is ready for ${invitation.email}. New users should check their email; existing users can sign in with their current credentials.`)
+      setSuccess(demoMode ? `Local invitation ready for ${invitation.email}. No email was sent; use the demo password to sign in.` : result.alreadyRegistered ? `${invitation.email} already has an active sign-in. No new invitation was sent; they should sign in with their existing credentials.` : `Invitation sent to ${invitation.email}. Ask the recipient to check their inbox and spam folder.`)
     })}>Send invitation</ActionButton>}</td></tr>)}</tbody></table>
     {!invitations.length && !error && <p className="platform-muted">No account invitations yet. Create an account above to get started.</p>}
   </section>

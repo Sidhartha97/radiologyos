@@ -61,7 +61,7 @@ def deliver(connect,identity,invitation_id,client,pool,issuer):
             AND expires_at>clock_timestamp() AND (status IN ('PENDING','FAILED') OR
               (status='PROVISIONING' AND lease_until<clock_timestamp())) RETURNING email''',(lease,invitation_id)).fetchone()
         if not row: raise SaaSError('Invitation unavailable or already being delivered.','InvitationBusy',409)
-    error=None; subject=None
+    error=None; subject=None; already_registered=False
     try:
         try:
             response=client.admin_create_user(UserPoolId=pool,Username=row[0],UserAttributes=[{'Name':'email','Value':row[0]}],DesiredDeliveryMediums=['EMAIL'])
@@ -71,6 +71,16 @@ def deliver(connect,identity,invitation_id,client,pool,issuer):
             response=client.admin_get_user(UserPoolId=pool,Username=row[0])
             if response.get('Enabled') is False: raise ValueError('Identity unavailable')
             attributes=response['UserAttributes']
+            # A previous AdminCreateUser can create the Cognito identity and
+            # then fail during email delivery. On retry, explicitly resend only
+            # while Cognito still requires the user to set their first password.
+            if response.get('UserStatus')=='FORCE_CHANGE_PASSWORD':
+                response=client.admin_create_user(UserPoolId=pool,Username=row[0],MessageAction='RESEND',DesiredDeliveryMediums=['EMAIL'])
+                attributes=response['User']['Attributes']
+            elif response.get('UserStatus')=='CONFIRMED':
+                already_registered=True
+            else:
+                raise ValueError('Existing Cognito account is not in an invitation-ready state')
         values={a['Name']:a['Value'] for a in attributes}
         if email_address(values.get('email'))!=row[0] or not values.get('sub'): raise ValueError('Identity mismatch')
         subject=values['sub']
@@ -83,4 +93,4 @@ def deliver(connect,identity,invitation_id,client,pool,issuer):
             error_code=%s,lease_until=NULL,delivery_token=NULL WHERE invitation_id=%s AND status='PROVISIONING'
             AND delivery_token=%s RETURNING invitation_id''',('FAILED' if error else 'INVITED',issuer,subject,error,invitation_id,lease)).fetchone()
         if not completed: raise SaaSError('Invitation delivery was superseded.','JobLeaseLost',409)
-    return {'status':'FAILED' if error else 'INVITED','errorCode':error}
+    return {'status':'FAILED' if error else 'INVITED','errorCode':error,'alreadyRegistered':already_registered}
