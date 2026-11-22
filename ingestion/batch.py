@@ -87,6 +87,10 @@ class Manifest:
         # Terraform owns the table; imports never create or alter infrastructure.
         self.table.load()
 
+    def ensure_active(self,tenant):
+        if tenant and self.table.get_item(Key={'PK':'TENANT#'+tenant,'SK':'ACCOUNT#DELETING'},ConsistentRead=True).get('Item'):
+            raise ValueError('This customer account is being deleted; ingestion is blocked.')
+
     def records(self,tenant):
         from boto3.dynamodb.conditions import Key
         params = {'KeyConditionExpression': Key('PK').eq('TENANT#'+tenant) & Key('SK').begins_with('INGESTION#REPORT#'), 'ConsistentRead': True}
@@ -100,6 +104,7 @@ class Manifest:
         return records
 
     def acquire(self, tenant):
+        self.ensure_active(tenant)
         try:
             self.table.update_item(Key={'PK':'TENANT#'+tenant, 'SK':'INGESTION#LOCK'},
                 UpdateExpression='SET #owner=:owner, expires_at=:expires',
@@ -113,6 +118,7 @@ class Manifest:
         self.lock_tenant = tenant
 
     def renew(self):
+        self.ensure_active(self.lock_tenant)
         if self.lock_tenant is None: raise RuntimeError('Import tracking requires a tenant lock')
         self.table.update_item(Key={'PK':'TENANT#'+self.lock_tenant,'SK':'INGESTION#LOCK'},
             UpdateExpression='SET expires_at=:expires', ConditionExpression='#owner=:owner AND expires_at >= :now',
@@ -131,6 +137,7 @@ class Manifest:
             self.lock_tenant = None
 
     def put(self,tenant,identity,payload):
+        self.ensure_active(tenant)
         if tenant != self.lock_tenant: raise ValueError('Manifest tenant does not match acquired lock')
         self.renew()
         self.table.put_item(Item={'PK':'TENANT#'+tenant, 'SK':'INGESTION#REPORT#'+identity,

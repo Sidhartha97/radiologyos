@@ -187,7 +187,7 @@ class Batch(unittest.TestCase):
 
     def test_dynamodb_manifest_payload_serialization_and_lock(self):
         from boto3.dynamodb.types import TypeSerializer
-        table=Mock(); manifest=batch.Manifest(table)
+        table=Mock(); table.get_item.return_value={}; manifest=batch.Manifest(table)
         manifest.acquire('t1')
         manifest.put('t1','r1',{'status':'PROCESSING','classification_confidence':0.95,'processed_at':None})
         item=table.put_item.call_args.kwargs['Item']
@@ -202,6 +202,7 @@ class Batch(unittest.TestCase):
         from botocore.exceptions import ClientError
         table=Mock()
         table.update_item.side_effect=ClientError({'Error':{'Code':'ConditionalCheckFailedException'}},'UpdateItem')
+        table.get_item.return_value={}
         manifest=batch.Manifest(table)
         with self.assertRaisesRegex(RuntimeError,'Another ingestion'):
             manifest.acquire('t1')

@@ -1,0 +1,60 @@
+RADIOLOGY OS - COMPLETED AWS TEARDOWN
+Date: 1 November 2026 (Asia/Calcutta)
+AWS account: 540581804458
+Region: us-east-1
+Profile retained: radiology-dev
+
+User explicitly requested destruction while retaining local code for rebuilding.
+Terraform applied the reviewed shutdown.tfplan successfully:
+0 added, 0 changed, 39 destroyed. No managed resources remain in Terraform state.
+
+EC2 was stopped before cleanup. New document uploads were blocked while the
+project bucket was emptied. 583 S3 versions/delete markers were permanently
+deleted. Terraform removed EC2/root disk, ECR/images, RDS, Cognito/users,
+DynamoDB, Bedrock KB/data sources, S3 bucket/vector index/vector bucket,
+project IAM/network resources and application/runtime Secrets Manager secrets.
+No final database snapshot was requested or created.
+
+Read-only checks found no remaining project live EC2/RDS/ECR resources, document
+buckets, DynamoDB tables, Cognito pools, knowledge bases, IAM roles or manual
+RDS snapshots. The checks cover this project's us-east-1 deployment, not a
+complete inventory or cleanup of unrelated resources across all AWS regions.
+Default/shared VPC resources and the developer IAM login were not deleted.
+
+KMS deletion is asynchronous. Current project key
+f9ac8326-c4f6-4a85-b64f-d7c12b0e1b1b is PendingDeletion, scheduled for
+1 December 2026 at 22:03:50 Asia/Calcutta. Four older project keys checked were
+already PendingDeletion (8-10 November 2026). No cancellation was performed.
+
+Local source, Terraform configuration/lock/state, .env and historical-report
+folders were NOT deleted. Existing .env IDs now reference deleted infrastructure;
+they must be refreshed if local Docker is used after recreation.
+No code commit or push was performed. No AWS data backup was created.
+
+REBUILD WHEN NEEDED (THESE COMMANDS WERE NOT EXECUTED DURING TEARDOWN)
+
+Set-Location "C:\Users\aa\Documents\Codex\2026-10-01\cr\outputs\radiology-reporting\terraform"
+$env:AWS_PROFILE = "radiology-dev"
+terraform init
+terraform plan '-var-file=historical-reports.tfvars' '-out=recreate.tfplan'
+
+Review the new plan and charges before executing:
+
+terraform apply recreate.tfplan
+Set-Location ..
+python scripts/deploy_aws.py deploy --profile radiology-dev --approve-schema --admin-email sidharthachintu1997@gmail.com
+python scripts/deploy_aws.py tunnel --profile radiology-dev
+
+Then open http://127.0.0.1:18000/ and complete the fresh Cognito invitation and
+password/email verification. Recreated infrastructure starts empty: old reports,
+customer accounts, passwords and historical indexes are not restored.
+Re-upload historical reports and recreate customer accounts as needed.
+
+The EC2 deployment helper derives current IDs from Terraform outputs, without
+manual .env editing. For local Docker, update .env from the new terraform output
+values, especially the dedicated runtime secret ARN, before rebuilding Docker.
+Review the development PC /32 rule in historical-reports.tfvars if using local
+RDS access; do not widen it. EC2 uses security-group based DB access.
+
+Full instructions: docs/AWS_DESTROY_AND_RECREATE.txt and docs/EC2_TESTING.md.
+Keep the Terraform state/configuration private and available for future use.

@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "library_allowed_origins" {
   type        = list(string)
   description = "Browser origins allowed to submit presigned historical-report uploads. Add the deployed HTTPS app origin before hosting."
-  default     = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:5173"]
+  default     = ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:5173", "http://localhost:18000", "http://127.0.0.1:18000"]
 }
 
 variable "project_name" {

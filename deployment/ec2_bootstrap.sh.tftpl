@@ -1,0 +1,53 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+dnf install -y docker
+systemctl enable --now docker amazon-ssm-agent
+mkdir -p /opt/radiologyos
+# Small, encrypted-root-volume swap for occasional ARM Docker image builds.
+if [ ! -f /var/lib/radiologyos.swap ]; then
+  fallocate -l 1G /var/lib/radiologyos.swap
+  chmod 600 /var/lib/radiologyos.swap
+  mkswap /var/lib/radiologyos.swap
+fi
+swapon /var/lib/radiologyos.swap || true
+grep -q '/var/lib/radiologyos.swap' /etc/fstab || echo '/var/lib/radiologyos.swap none swap sw 0 0' >> /etc/fstab
+cat > /usr/local/bin/radiologyos-run <<'RUN'
+#!/bin/bash
+set -euo pipefail
+umask 077
+cd /opt/radiologyos
+aws secretsmanager get-secret-value --region '${region}' --secret-id '${config_secret_arn}' --query SecretString --output text | python3 -c '
+import json,sys
+data=json.load(sys.stdin)
+with open("runtime.env","w",encoding="utf-8") as target:
+ for key,value in data.items():
+  if not key.replace("_", "").isalnum() or "\n" in str(value) or "\r" in str(value):
+   raise SystemExit("Invalid application environment")
+  target.write(key+"="+str(value)+"\n")
+'
+IMAGE=$(cat /opt/radiologyos/image.txt)
+exec docker run --rm --name radiologyos --network host --env-file runtime.env \
+  --log-opt max-size=10m --log-opt max-file=2 \
+  --mount source=radiologyos-uploads,target=/app/uploads \
+  "$IMAGE"
+RUN
+chmod 700 /usr/local/bin/radiologyos-run
+cat > /etc/systemd/system/radiologyos.service <<'SERVICE'
+[Unit]
+Description=Radiology OS testing container (HTTP ingress restricted by security group)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/radiologyos-run
+ExecStop=/usr/bin/docker stop -t 30 radiologyos
+Restart=on-failure
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+SERVICE
+systemctl daemon-reload
+# Explicit deploy/bootstrap starts the service only after image/schema/config checks.
+systemctl enable radiologyos.service

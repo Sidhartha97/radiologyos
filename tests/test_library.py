@@ -25,6 +25,7 @@ class LibraryTests(unittest.TestCase):
         service=object.__new__(library.Library)
         service.cfg={'tenant':'t1','bucket':'b','prefix':'old-reports/','originalPrefix':'historical-originals/','kb':'kb','ds':'ds'}
         service.tenant='t1'; service.table=Mock();service.s3=Mock();service.agent=Mock()
+        service.table.get_item.return_value={}
         return service
 
     def test_validation_rejects_combined_and_unsupported(self):

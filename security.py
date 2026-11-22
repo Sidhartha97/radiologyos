@@ -26,6 +26,8 @@ def login_failure(exc, request_id):
         'InvalidPasswordException': ('The new password must meet your hospital password policy: at least 12 characters with uppercase, lowercase, numbers and symbols.',400),
         'CodeMismatchException': ('The verification code is incorrect. Check the code and try again.',400),
         'ExpiredCodeException': ('The verification code expired. Start sign-in again.',400),
+        'CodeDeliveryFailureException': ('Your password was accepted, but Cognito could not send the email verification code. Ask the administrator to check Cognito email delivery.',503),
+        'LimitExceededException': ('Cognito has reached an email verification or request limit. Wait before trying again; your new password is already saved.',429),
         'PasswordResetRequiredException': ('Your password must be reset. Contact your hospital administrator.',403),
         'TooManyRequestsException': ('Too many sign-in attempts. Wait briefly and try again.',429),
         'InvalidParameterException': ('Cognito could not accept this sign-in request. Start sign-in again; if it persists, ask the administrator to check the app client configuration.',400),
@@ -53,7 +55,7 @@ class CognitoAuth:
     def __init__(self, connect):
         self.connect, self.keys = connect, None
 
-    def verify(self, token):
+    def verify_claims(self, token):
         import jwt
         cfg = cognito_config()
         if self.keys is None:
@@ -79,6 +81,11 @@ class CognitoAuth:
             raise AccessError('Cannot reach the authentication signing-key service. Check server network access and retry.',503) from None
         except Exception:
             raise AccessError('Your session is invalid or expired. Sign in again.') from None
+        return claims
+
+    def verify(self, token):
+        claims=self.verify_claims(token)
+        cfg=cognito_config()
         with self.connect() as conn:
             row = conn.execute('''SELECT tenant_id,role FROM hospital_memberships
                 WHERE issuer=%s AND subject=%s AND enabled=true''', (cfg['issuer'],claims['sub'])).fetchone()

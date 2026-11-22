@@ -1,0 +1,294 @@
+RADIOLOGY OS - DESTROY AND RECREATE AWS INFRASTRUCTURE
+Prepared: 18 October 2026
+
+IMPORTANT
+---------
+This guide describes the current Terraform + EC2 + ECR deployment.
+The Docker Hub workflow is only a proposal and is not implemented.
+Following the destroy steps permanently deletes this project's managed data,
+including reports, historical uploads, databases, Cognito users and ECR images.
+No report backup or data restoration is included.
+Creating infrastructure again does NOT restore deleted data or old passwords.
+Creating/running AWS infrastructure incurs charges.
+
+Do not execute destroy until you have reviewed the correct AWS account and plan.
+These instructions do not delete anything by themselves.
+
+Project folder:
+C:\Users\aa\Documents\Codex\2026-10-01\cr\outputs\radiology-reporting
+
+AWS profile: radiology-dev
+AWS region: us-east-1
+Expected AWS account: 540581804458
+
+
+PART 1 - KEEP THE CODE AND TERRAFORM MANAGEMENT FILES
+--------------------------------------------------
+Keep the project source, Dockerfile, scripts, migrations and Terraform files.
+Keep terraform/historical-reports.tfvars and testing-host.auto.tfvars.
+Keep .terraform.lock.hcl and the existing Terraform state files private.
+Do not remove Terraform state to force a fresh start: doing so can orphan AWS
+resources and make them harder to find/delete. Do not commit state, plan files,
+.env files, passwords or AWS keys to Git.
+
+Terraform state/configuration is infrastructure-management information, not a
+backup of your reports. No report-data backup is required by this procedure.
+
+
+PART 2 - STOP APPLICATION ACTIVITY
+---------------------------------
+1. Finish testing and stop all uploads, ingestion commands and deployments.
+2. Close the SSM tunnel terminal using Ctrl+C.
+3. In AWS Console -> EC2 -> Instances, identify this project's testing host and
+   STOP it. Verify the Name/project and account before stopping an instance.
+   Stopping prevents the EC2 application from writing new data during cleanup.
+4. If local Docker is also running this application against the same AWS data,
+   stop it from the project folder:
+
+   docker compose down
+
+Do not use unrelated Docker cleanup/prune commands.
+
+
+PART 3 - EMPTY THE PROJECT'S VERSIONED DOCUMENT BUCKET
+----------------------------------------------------
+The document bucket has force_destroy=false, so Terraform will refuse to remove
+it while it contains objects. Deployment source bundles also count as objects.
+
+1. Sign in to the expected AWS account: 540581804458.
+2. Open S3 -> General purpose buckets.
+3. Select ONLY this project's bucket:
+
+   radiologyos-dev-540581804458-reports
+
+4. Choose Empty, complete the confirmation shown by AWS, and wait for success.
+5. This permanently deletes ALL versions and delete markers in that bucket,
+   including reports and deployment bundles. It cannot be undone.
+6. Inspect incomplete multipart uploads too; abort any belonging to this project.
+
+Do not empty other buckets. If your configured bucket name has changed, verify
+the current name with 'terraform output -raw documents_bucket' first.
+Do not rely on 'aws s3 rm --recursive' to empty a versioned bucket: older
+versions/delete markers can remain.
+
+AWS reference:
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/empty-bucket.html
+
+
+PART 4 - REVIEW AND DESTROY TERRAFORM-MANAGED INFRASTRUCTURE
+---------------------------------------------------------
+Open PowerShell and run:
+
+Set-Location "C:\Users\aa\Documents\Codex\2026-10-01\cr\outputs\radiology-reporting\terraform"
+$env:AWS_PROFILE = "radiology-dev"
+aws sts get-caller-identity --profile radiology-dev
+
+Confirm the returned Account is 540581804458 before proceeding.
+
+Prepare a NEW destruction plan:
+
+terraform plan -destroy '-var-file=historical-reports.tfvars' '-out=destroy.tfplan'
+
+Review every listed resource. This should be this project's infrastructure,
+including EC2, its root disk, ECR images/repository, RDS, Cognito, S3/Bedrock/vector
+resources, DynamoDB, project IAM resources and managed application secrets.
+Shared/default VPC resources referenced as Terraform data sources are not owned
+or destroyed by this project.
+
+ONLY IF YOU ACCEPT THE PERMANENT DELETIONS, run:
+
+terraform apply destroy.tfplan
+
+Applying a saved plan does not provide another normal interactive yes/no review.
+Do not run the apply command merely to inspect what will happen.
+
+Wait for successful completion. If any command fails, cleanup is incomplete.
+Investigate the error and create a fresh destruction plan before retrying;
+do not keep applying an old saved plan after state has changed.
+
+Current settings skip the final RDS snapshot and disable RDS deletion protection.
+If you changed those settings later, review them before destroying.
+The KMS key is scheduled for deletion with a 30-day waiting period, not deleted
+immediately. Do not cancel deletion unless you intend to retain the key.
+
+After successful destroy:
+
+terraform state list
+
+Check for remaining managed resource entries. Also inspect AWS Console for this
+project's leftover EC2/EBS, RDS/snapshots, ECR, S3/vector buckets, DynamoDB and
+Secrets Manager resources. Terraform does not delete unrelated or unmanaged
+resources. A failed destroy does not guarantee billing has stopped.
+
+Never delete your IAM developer profile/user or AWS account as part of this guide.
+No complete audit of unrelated account resources is implied by these commands.
+
+
+PART 5 - RECREATE INFRASTRUCTURE WHEN NEEDED
+------------------------------------------
+Keep the same project/configuration and Terraform management files.
+Docker Desktop is not needed for this EC2 deployment; the image builds on EC2.
+Your Windows PC needs Python, boto3, AWS CLI, Terraform and the SSM plugin.
+
+Before starting, review terraform/historical-reports.tfvars:
+- AWS region and bucket names must still be correct/available.
+- If you intend to connect to RDS from local Docker, dev_client_cidr must match
+  your current public IPv4 followed by /32. Never use 0.0.0.0/0.
+- EC2 connects using its security group; its DB access does not require the
+  PC's public IP rule. Do not broaden RDS access just to run the EC2 app.
+- Keep terraform/testing-host.auto.tfvars enabled for the testing host.
+
+Run in PowerShell:
+
+Set-Location "C:\Users\aa\Documents\Codex\2026-10-01\cr\outputs\radiology-reporting\terraform"
+$env:AWS_PROFILE = "radiology-dev"
+aws sts get-caller-identity --profile radiology-dev
+terraform init
+terraform plan '-var-file=historical-reports.tfvars' '-out=recreate.tfplan'
+
+Review the plan. Only after accepting the resources/charges, run:
+
+terraform apply recreate.tfplan
+
+If apply fails, investigate before retrying and prepare a new plan for the
+current state. RDS capacity/availability can change; no instance-class increase
+or security broadening should be made without reviewing the consequences.
+
+
+PART 6 - DEPLOY THE APPLICATION AND INITIALIZE THE NEW DATABASE
+-------------------------------------------------------------
+After Terraform completes successfully, run:
+
+Set-Location "C:\Users\aa\Documents\Codex\2026-10-01\cr\outputs\radiology-reporting"
+python scripts/deploy_aws.py deploy --profile radiology-dev --approve-schema --admin-email sidharthachintu1997@gmail.com
+
+If Python reports that boto3 is missing:
+
+python -m pip install boto3
+
+Then retry after reviewing the preceding deployment's completion/failure stage.
+
+The deploy helper reads the CURRENT Terraform outputs, uploads an allowlisted
+source bundle, builds the ARM Docker image on EC2, pushes it to ECR, explicitly
+applies the reviewed database migrations, configures a dedicated non-owner
+runtime login and starts the application.
+
+--approve-schema authorizes database migrations: review new migration changes
+before running it. Database initialization is not an automatic app-startup task.
+No AWS keys, report files or .env files are packaged into the Docker image.
+
+On a new Cognito pool, the approved admin email receives an invitation for fresh
+password/email-verification setup. The old password does not survive teardown.
+This admin receives platform administration only, not clinical/signing access.
+Create customer/staff accounts and upload historical reports again as needed.
+
+Check application health:
+
+python scripts/deploy_aws.py status --profile radiology-dev
+
+If deployment is interrupted during database bootstrap, inspect the testing-host
+IAM role for the temporary radiologyos-bootstrap-temporary policy. Normal runtime
+must not retain master-secret access. Review partial completion before retrying.
+
+
+PART 7 - OPEN THE EC2 APPLICATION FROM YOUR PC
+-------------------------------------------
+Run from the project folder and KEEP this terminal running:
+
+python scripts/deploy_aws.py tunnel --profile radiology-dev
+
+Open this address in your browser:
+
+http://127.0.0.1:18000/
+
+Sign in privately using the current Cognito account/password.
+Closing the tunnel stops browser access, NOT the EC2 instance or AWS charges.
+Do not open the EC2 public IP: this testing host has zero inbound web/SSH ports.
+
+If the SSM plugin is missing, install it using AWS's official instructions:
+https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-windows.html
+
+The tunnel helper also finds the standard Windows installation automatically:
+C:\Program Files\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe
+
+
+PART 8 - HOW TO UPDATE .ENV
+--------------------------
+FOR EC2:
+No manual .env editing is required. The deployment helper reads current Terraform
+outputs and writes the new application configuration into Secrets Manager.
+Re-run the deployment after recreating infrastructure; do not reuse old IDs.
+
+FOR LOCAL DOCKER ONLY:
+Run inside the terraform folder:
+
+terraform output
+
+Edit the .env file in the PROJECT ROOT, not the terraform folder. Replace its
+infrastructure values using these mappings. Use each output's value, not the
+literal output name shown below.
+
+.env key                           Terraform output
+---------------------------------  ---------------------------------
+RAG_S3_BUCKET                       documents_bucket
+BEDROCK_KNOWLEDGE_BASE_ID           knowledge_base_id
+BEDROCK_DATA_SOURCE_ID              data_source_id
+BEDROCK_FINAL_DATA_SOURCE_ID        final_data_source_id
+BEDROCK_MODEL_ARN                   generation_model_arn
+RAG_KMS_KEY_ID                      kms_key_arn
+POSTGRES_SECRET_ARN                 postgres_secret_arn
+POSTGRES_ENDPOINT                   postgres_endpoint
+POSTGRES_DATABASE                   postgres_database
+POSTGRES_PORT                       postgres_port
+SAAS_DATABASE_SECRET_ARN            runtime_database_secret_arn
+COGNITO_USER_POOL_ID                cognito_user_pool_id
+COGNITO_CLIENT_ID                   cognito_client_id
+DYNAMODB_TABLE                     dynamodb_table
+APPLICATION_INSTANCE_PROFILE_NAME  application_instance_profile_name
+APPLICATION_ROLE_ARN               application_role_arn
+APPLICATION_SECURITY_GROUP_ID      application_security_group_id
+VECTOR_BUCKET                      vector_bucket
+VECTOR_INDEX_ARN                   vector_index_arn
+
+Keep these local settings unless you deliberately change your environment:
+
+AWS_PROFILE=radiology-dev
+AWS_REGION=us-east-1
+SAAS_ENABLED=true
+
+Preserve other application settings and local historical-report folder paths.
+Do not put an AWS access key or database password into this guide or Git.
+SAAS_DATABASE_SECRET_ARN must reference the dedicated runtime secret, NOT the
+RDS-managed master secret. A stale SAAS_DATABASE_URL, if added separately, must
+not override the newly configured runtime secret.
+
+After saving .env, from the project root run:
+
+docker compose up -d --build --force-recreate
+
+Local Docker uses http://127.0.0.1:8000/.
+EC2 through the SSM tunnel uses http://127.0.0.1:18000/.
+Local Docker can still read/write LIVE AWS services configured in .env.
+
+
+PART 9 - DEPLOY FUTURE CODE CHANGES WITHOUT RECREATING INFRASTRUCTURE
+------------------------------------------------------------------
+From the project folder, after reviewing code and migrations:
+
+python scripts/deploy_aws.py deploy --profile radiology-dev --approve-schema
+python scripts/deploy_aws.py status --profile radiology-dev
+
+Refresh the browser at http://127.0.0.1:18000/ while the tunnel is running.
+This publishes a new image and restarts the app; it does not run Terraform or
+recreate infrastructure. Code changes on your PC do not automatically update EC2.
+
+
+FINAL REMINDERS
+---------------
+- No destroy/recreate action was performed by creating this file.
+- This is single-node testing infrastructure, not a production clinical system.
+- Production TLS/domain, private RDS posture, backup/restore, MFA and remaining
+  security/clinical workflow checks are separate work.
+- A fresh deployment has no historical reports or customer data until re-uploaded.
+- Keep code and infrastructure-management files; do not keep/report data unless
+  you independently choose to do so.

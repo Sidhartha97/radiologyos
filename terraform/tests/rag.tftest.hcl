@@ -16,6 +16,7 @@ mock_provider "aws" {
 }
 
 variables {
+  enable_testing_host   = false
   documents_bucket_name = "radiologyos-offline-test-documents"
   vector_bucket_name    = "radiologyos-offline-test-vectors"
 }

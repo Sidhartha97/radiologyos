@@ -1,0 +1,5 @@
+USG ABDOMEN
+FINDINGS
+Synthetic test report. This text is for software validation only, not clinical use.
+IMPRESSION
+Synthetic software-testing example.

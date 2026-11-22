@@ -187,6 +187,8 @@ class Library:
         return {'counts':counts, 'batches':sorted(self.batches(), key=lambda x:x['createdAt'], reverse=True)[:20], 'workerError':WORKER_ERRORS.get(self.tenant)}
 
     def tick(self):
+        if self.table.get_item(Key={'PK':'TENANT#'+self.tenant,'SK':'ACCOUNT#DELETING'},ConsistentRead=True).get('Item'):
+            return
         batches = [b for b in self.batches() if b['status'] in ('READY','INDEXING')]
         if not batches: return
         manifest=Manifest(self.table); manifest.acquire(self.tenant)

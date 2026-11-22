@@ -1,0 +1,18 @@
+# Explicitly separate from docker-compose.yml and the live app/database.
+# Local synthetic test credentials only. This service is never an AWS target.
+name: radiologyos-saas-tests
+services:
+  postgres-test:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: radiology_saas_test
+      POSTGRES_PASSWORD: local-test-only
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d radiology_saas_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 20

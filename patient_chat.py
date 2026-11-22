@@ -79,8 +79,9 @@ class ChatConflict(ValueError):
 
 
 class PostgresChatStore:
-    def __init__(self, connect):
+    def __init__(self, connect, initialize=True):
         self.connect = connect
+        if not initialize: return
         with connect() as conn:
             conn.execute('''CREATE TABLE IF NOT EXISTS patient_conversations (
                 tenant_id text NOT NULL, patient_id text NOT NULL,

@@ -64,7 +64,7 @@ resource "aws_s3_bucket_cors_configuration" "library" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["POST"]
-    allowed_origins = var.library_allowed_origins
+    allowed_origins = concat(var.library_allowed_origins, var.enable_testing_host && var.testing_app_client_cidr != "" ? ["http://${aws_eip.testing[0].public_ip}:8000"] : [])
     expose_headers  = ["ETag", "x-amz-request-id"]
     max_age_seconds = 300
   }
@@ -182,19 +182,24 @@ resource "aws_security_group" "database" {
   name        = "${var.project_name}-${var.environment}-postgres"
   description = "Private PostgreSQL security group"
   vpc_id      = data.aws_vpc.default.id
-  ingress {
-    description     = "PostgreSQL from application runtime only"
-    protocol        = "tcp"
-    from_port       = 5432
-    to_port         = 5432
-    security_groups = [aws_security_group.application.id]
-  }
   egress {
     protocol    = "-1"
     from_port   = 0
     to_port     = 0
     cidr_blocks = ["0.0.0.0/0"]
   }
+}
+
+# Manage both database rules independently; mixing inline ingress with a
+# separate PC rule causes Terraform to remove/recreate the other rule.
+resource "aws_security_group_rule" "database_application" {
+  type                     = "ingress"
+  security_group_id        = aws_security_group.database.id
+  source_security_group_id = aws_security_group.application.id
+  protocol                 = "tcp"
+  from_port                = 5432
+  to_port                  = 5432
+  description              = "PostgreSQL from application runtime only"
 }
 
 resource "aws_security_group_rule" "database_dev_pc" {

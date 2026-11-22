@@ -7,7 +7,7 @@ import { ActionButton, LoadingStatus, Spinner, useAction } from './Loading'
 type Detail = {time?:string; stage:string; code:string; reason:string; action:string; requestId?:string}
 type ReportFile = {id:string; name:string; status:string; error?:Detail}
 type Batch = {id:string; modality:string; status:string; createdAt:string; files:ReportFile[]; events:unknown[]; error?:Detail; job?:{job_id:string;status:string}; jobStatus?:string; failureReasons?:string[]}
-type Snapshot = {counts:Record<string,Record<string,number>>; batches:Batch[]; workerError?:Detail}
+type Snapshot = {counts:Record<string,Record<string,number>>; batches:Batch[]; workerError?:Detail; mode?:string; notice?:string}
 type Preview = {name:string; size:number; sha256:string; modality:string; words:number; duplicate:boolean}
 type Selection = {file:File; status:string; preview?:Preview; error?:string}
 
@@ -83,22 +83,27 @@ export default function HistoricalLibrary() {
     log(`Validation complete: ${result.filter(x=>x.status==='Ready').length} ready, ${result.filter(x=>x.preview?.duplicate).length} duplicates, ${result.filter(x=>x.error).length} need review.`)
   })
   const finish=async(value:{id:string;uploaded:string[]})=>{
-    await api(`/batches/${value.id}/complete`,{uploaded:value.uploaded})
-    setCompletion(null); log(`Batch ${value.id}: background validation and indexing queued.`); await refresh()
+    const result=await api<{status:string}>(`/batches/${value.id}/complete`,{uploaded:value.uploaded})
+    setCompletion(null); log(result.status==='LOCAL_STAGED' ? `Batch ${value.id}: staged locally only. S3 upload and indexing are disabled in this demo.` : `Batch ${value.id}: processing status ${result.status}.`); await refresh()
   }
   const upload=()=>action.run('upload',async()=>{
     const ready=selected.filter(x=>x.status==='Ready'&&x.preview)
     if(!ready.length)return
     setError('')
     try{
-      const batch=await api<{batchId:string;uploads:{id:string;url:string;fields:Record<string,string>}[]}>('/batches',{modality,files:ready.map(x=>x.preview)})
+      const batch=await api<{batchId:string;uploads:{id:string;url:string;fields:Record<string,string>;transport?:string}[]}>('/batches',{modality,files:ready.map(x=>x.preview)})
       const uploaded:string[]=[]
       for(let i=0;i<ready.length;i++){
         const item=ready[i], target=batch.uploads[i]
         const update=(status:string,reason?:string)=>setSelected(old=>old.map(x=>x.file===item.file?{...x,status,error:reason}:x))
         try{
-          await directUpload(target.url,target.fields,item.file,n=>update(`Uploading ${n}%`))
-          uploaded.push(target.id);update('Uploaded');log(`${item.file.name}: uploaded to S3.`)
+          if(target.transport==='local-demo') {
+            update('Staging locally…'); await api('/demo-upload',{...target.fields,content:await base64(item.file)})
+            uploaded.push(target.id); update('Staged locally · not indexed'); log(`${item.file.name}: staged in local demo memory only.`)
+          } else {
+            await directUpload(target.url,target.fields,item.file,n=>update(`Uploading ${n}%`))
+            uploaded.push(target.id);update('Uploaded');log(`${item.file.name}: uploaded to S3.`)
+          }
         }catch(e){update('Upload failed',describe(e));log(`${item.file.name}: ${describe(e)}`)}
       }
       const value={id:batch.batchId,uploaded};setCompletion(value);await finish(value)
@@ -112,6 +117,7 @@ export default function HistoricalLibrary() {
   return <div className="library">
     <section className="card"><div className="section-head"><div><h2>Historical Report Library</h2><p>Upload reference reports by modality and track when they become searchable.</p></div><ActionButton className="button ghost" disabled={busy || loading} busy={refreshing} busyLabel="Refreshing…" onClick={()=>void refresh(true)}><RefreshCw size={16}/> Refresh</ActionButton></div>
       {loading&&<LoadingStatus>Loading historical library…</LoadingStatus>}
+      {snapshot.notice&&<p role="status" className="library-notice">{snapshot.notice}</p>}
       <div className="library-counts">{['CT','MRI','USG','XRAY','MAMMOGRAM','BMD'].map(m=><div key={m}><b>{m}</b><strong>{snapshot.counts[m]?.COMPLETED||0}</strong><small>indexed · {snapshot.counts[m]?.PROCESSING||0} processing · {snapshot.counts[m]?.FAILED||0} failed</small></div>)}</div>
       {error&&<p role="alert" className="library-error">{error}</p>}
       {action.error&&<p role="alert" className="library-error">{action.error}</p>}
@@ -119,8 +125,8 @@ export default function HistoricalLibrary() {
       <label>Modality <select disabled={busy} value={modality} onChange={e=>{setModality(e.target.value);setSelected(old=>old.map(x=>({file:x.file,status:'Not validated'})))}}>{['CT','MRI','USG','XRAY','MAMMOGRAM','BMD'].map(m=><option key={m}>{m}</option>)}</select></label>
       <div className="library-drop" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!busy)choose(e.dataTransfer.files)}}><Upload/><b>Drop reports here</b><span>One report per file · DOCX, PDF, TXT · 10 MB each · up to 100 files per batch</span><div className="row"><button disabled={busy} className="button ghost" onClick={()=>files.current?.click()}>Choose files</button><button disabled={busy} className="button ghost" onClick={()=>folder.current?.click()}><FolderOpen size={16}/> Choose folder</button></div></div>
       <input hidden ref={files} type="file" multiple accept=".docx,.pdf,.txt" onChange={e=>{choose(e.target.files);e.target.value=''}}/><input hidden ref={folder} type="file" multiple onChange={e=>{choose(e.target.files);e.target.value=''}}/>
-      <div className="row"><ActionButton disabled={busy||!selected.length} busy={action.pending==='validate'} busyLabel="Validating files…" className="button ghost" onClick={validate}>Validate selected files</ActionButton><ActionButton disabled={busy||!selected.some(x=>x.status==='Ready')} busy={action.pending==='upload'} busyLabel="Uploading & queuing…" className="button primary" onClick={upload}>Upload & index</ActionButton><span>{selected.length} selected</span></div>
-      {busy&&<LoadingStatus>{action.pending==='validate'?'Checking selected reports…':action.pending==='upload'?'Uploading reports to S3 and queuing indexing…':'Submitting processing request…'}</LoadingStatus>}
+      <div className="row"><ActionButton disabled={busy||loading||!selected.length} busy={action.pending==='validate'} busyLabel="Validating files…" className="button ghost" onClick={validate}>Validate selected files</ActionButton><ActionButton disabled={busy||loading||!selected.some(x=>x.status==='Ready')} busy={action.pending==='upload'} busyLabel={snapshot.mode==='local-demo'?'Staging locally…':'Uploading & queuing…'} className="button primary" onClick={upload}>{snapshot.mode==='local-demo'?'Stage files locally':'Upload & index'}</ActionButton><span>{selected.length} selected</span></div>
+      {busy&&<LoadingStatus>{action.pending==='validate'?'Checking selected reports…':action.pending==='upload'?snapshot.mode==='local-demo'?'Staging files in local demo memory…':'Uploading reports to S3 and queuing indexing…':'Submitting processing request…'}</LoadingStatus>}
       {completion&&<ActionButton className="button ghost" disabled={busy} busy={action.pending==='finish'} busyLabel="Starting batch…" onClick={()=>void action.run('finish',()=>finish(completion))}>Retry starting this uploaded batch</ActionButton>}
       {!!selected.length&&<div className="library-table"><table><thead><tr><th>File</th><th>Validation / upload</th><th>Details</th></tr></thead><tbody>{selected.map((x,i)=><tr key={i}><td>{x.file.name}</td><td>{x.status.startsWith('Uploading')&&<Spinner/>} {x.status}</td><td>{x.error|| (x.preview ? `${x.preview.words} words · ${x.preview.modality}`:'')}</td></tr>)}</tbody></table></div>}
     </section>

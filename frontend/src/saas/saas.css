@@ -1,0 +1,13 @@
+.saas-home { max-width: 1100px; margin: 0 auto; padding: 28px; }
+.saas-home .logo { color: #153247; }
+.saas-home .card { margin: 24px 0; padding: 24px; overflow-x: auto; }
+.workspace-choice { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0; border-bottom: 1px solid #e3eaf3; }
+.workspace-choice small { display: block; margin-top: 5px; color: #64748b; }
+.lease-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; background: #eff6ff; border: 1px solid #cbdcf4; border-radius: 8px; margin-bottom: 12px; }
+.lease-banner[role=alert] { background: #fff6f5; border-color: #efc4c0; }
+.login-modes { display: flex; gap: 8px; margin: 16px 0; }
+.workspace-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+.access-fields { border: 1px solid #e3eaf3; border-radius: 8px; padding: 16px; display: grid; gap: 12px; }
+.access-fields label { display: block; }
+.access-fields input[type=checkbox] { width: auto; margin-right: 8px; }
+@media(max-width: 600px) { .workspace-choice, .lease-banner { align-items: stretch; flex-direction: column; } .saas-home { padding: 16px; } }

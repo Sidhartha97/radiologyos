@@ -22,7 +22,7 @@ except ImportError:
 
 ROOT = Path(__file__).parent
 DATA = ROOT / 'data.json'
-STATIC = ROOT / 'web'
+STATIC = ROOT / 'frontend' / 'dist' if (ROOT / 'frontend' / 'dist' / 'index.html').is_file() else ROOT / 'web'
 UPLOADS = ROOT / 'uploads'
 UPLOADS.mkdir(exist_ok=True)
 DATABASE_INIT_ERROR = ''
@@ -44,6 +44,8 @@ def load_local_env():
             os.environ.setdefault(key.strip(),value)
 
 load_local_env()
+SAAS_ENABLED=os.getenv('SAAS_ENABLED','false').lower()=='true'
+SAAS_API=None
 
 def now(): return datetime.datetime.now().isoformat(timespec='seconds')
 
@@ -71,9 +73,12 @@ def database_url_from_environment():
         print('PostgreSQL secret lookup failed:', exc)
         return ''
 
-POSTGRES_ENABLED = bool(database_url_from_environment())
+POSTGRES_ENABLED = bool(os.getenv('SAAS_DATABASE_URL') or os.getenv('SAAS_DATABASE_SECRET_ARN')) if SAAS_ENABLED else bool(database_url_from_environment())
 
 def pg_connect():
+    if SAAS_ENABLED:
+        from saas.runtime import connect
+        return connect()
     if psycopg is None:
         raise RuntimeError('DATABASE_URL is set but psycopg is not installed. Run: pip install psycopg[binary]')
     return psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=8, sslmode='require')
@@ -160,7 +165,14 @@ def send(req, code, value):
     # AWS SDK responses can contain datetime objects. Always serialize them
     # safely so diagnostics never terminate the HTTP request unexpectedly.
     raw=json.dumps(value, default=str).encode()
-    req.send_response(code); req.send_header('Content-Type','application/json'); req.send_header('Cache-Control','no-store'); req.send_header('X-Content-Type-Options','nosniff'); req.send_header('Content-Length',str(len(raw))); req.end_headers(); req.wfile.write(raw)
+    req.send_response(code)
+    cookie=getattr(req,'saas_cookie',None)
+    if cookie is not None:
+        value='radiology_session='+cookie+'; Path=/api; HttpOnly; SameSite=Strict; Max-Age='+('3600' if cookie else '0')
+        if os.getenv('APP_COOKIE_SECURE','true').lower()=='true': value+='; Secure'
+        req.send_header('Set-Cookie',value)
+        req.saas_cookie=None
+    req.send_header('Content-Type','application/json'); req.send_header('Cache-Control','no-store'); req.send_header('X-Content-Type-Options','nosniff'); req.send_header('Content-Length',str(len(raw))); req.end_headers(); req.wfile.write(raw)
 
 def aws_settings():
     identity=IDENTITY.get()
@@ -169,7 +181,11 @@ def aws_settings():
 def aws_client(name):
     try:
         import boto3
-        return boto3.client(name, region_name=aws_settings()['region'] or None)
+        client=boto3.client(name, region_name=aws_settings()['region'] or None)
+        if SAAS_ENABLED and name=='bedrock-runtime':
+            from saas.token_tracking import Runtime,Tracker
+            return Runtime(client,Tracker(pg_connect))
+        return client
     except Exception as exc:
         global AWS_CLIENT_ERROR
         AWS_CLIENT_ERROR=f'{name}: {exc}'
@@ -347,6 +363,11 @@ def ensure_security():
     global SECURITY_READY
     with SECURITY_LOCK:
         if not SECURITY_READY:
+            if SAAS_ENABLED:
+                from saas.runtime import ready
+                ready(pg_connect)
+                SECURITY_READY=True
+                return
             if not os.getenv('DATABASE_URL') and not database_url_from_environment():
                 raise AccessError('PostgreSQL must be configured for authenticated hospital access.',503)
             initialize_tenants(pg_connect)
@@ -357,13 +378,25 @@ def patient_chat_service():
     global CHAT_SERVICE
     # App startup may have entered JSON fallback during a temporary network failure.
     # Chat must retry the configured database rather than remain disabled forever.
-    if not os.getenv('DATABASE_URL') and not database_url_from_environment():
+    if not SAAS_ENABLED and not os.getenv('DATABASE_URL') and not database_url_from_environment():
         raise RuntimeError('Patient chat history requires a configured PostgreSQL connection.')
     with CHAT_SERVICE_LOCK:
         if CHAT_SERVICE is None:
-            CHAT_SERVICE = PatientChat(PostgresChatStore(pg_connect), rag_generate)
-            CHAT_SERVICE.start_cleanup()
+            CHAT_SERVICE = PatientChat(PostgresChatStore(pg_connect,initialize=not SAAS_ENABLED), guarded_generation if SAAS_ENABLED else rag_generate)
+            if not SAAS_ENABLED: CHAT_SERVICE.start_cleanup()
     return CHAT_SERVICE
+
+
+def guarded_generation(payload):
+    # Revalidate worker membership before calling the protected generation code.
+    from saas.runtime import SCOPE,authorize_connection
+    from saas.permissions import SaaSError
+    if not SCOPE.get() or os.getenv('SAAS_AI_ENABLED','false').lower()!='true':
+        raise SaaSError('AI generation is unavailable.')
+    with pg_connect() as conn:
+        workspace=authorize_connection(conn,SCOPE.get())
+        workspace.require('reports.read_all'); workspace.require('ai.generate')
+    return rag_generate(payload)
 
 
 def validate_chat_patient(patient_id, report_id=None):
@@ -378,14 +411,23 @@ def validate_chat_patient(patient_id, report_id=None):
 
 
 class App(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(30)
+
     def secured(self, method):
         self.defer_json=False
         self.pending_response=None
+        self.saas_cookie=None
         self.request_id=uuid.uuid4().hex
         path=urlparse(self.path).path
         if not path.startswith('/api/'):
             return getattr(self,'route_'+method)()
         try:
+            if path=='/api/auth/config' and method=='GET':
+                send(self,200,{'saas':globals().get('SAAS_ENABLED',False)}); return
+            if globals().get('SAAS_ENABLED',False) and path!='/api/health':
+                return self.saas_request(method)
             if path=='/api/auth/login' and method=='POST':
                 return self.login()
             if path=='/api/health':
@@ -433,9 +475,13 @@ class App(BaseHTTPRequestHandler):
         except ValueError:
             self.defer_json=False
             send(self,400,{'error':'Invalid request or patient/report ownership.'})
-        except Exception:
+        except Exception as exc:
             self.defer_json=False
-            audit('api_failure',self.request_id,IDENTITY.get(),method=method)
+            # Exception text/tracebacks may contain report rows, tokens or URLs.
+            provider_code=getattr(exc,'response',{}).get('Error',{}).get('Code')
+            audit('api_failure',self.request_id,IDENTITY.get(),method=method,
+                  errorType=type(exc).__name__,sqlstate=getattr(exc,'sqlstate',None),
+                  providerCode=provider_code if isinstance(provider_code,str) and re.fullmatch(r'[A-Za-z0-9_]{1,80}',provider_code) else None)
             send(self,503,{'error':'Service unavailable. Check authentication/database configuration.',
                            'requestId':self.request_id})
 
@@ -443,6 +489,25 @@ class App(BaseHTTPRequestHandler):
     def do_POST(self): self.secured('POST')
     def do_PUT(self): self.secured('PUT')
     def do_DELETE(self): self.secured('DELETE')
+
+    def saas_request(self,method):
+        global SAAS_API
+        from saas.api import API,RollbackResponse
+        from saas.permissions import SaaSError
+        ensure_security()
+        if SAAS_API is None: SAAS_API=API(pg_connect,aws_client,report_generate=rag_generate)
+        self.defer_json=True
+        try:
+            try:
+                SAAS_API.handle(self,method,body,send,lambda value:getattr(self,'route_'+value)())
+            except RollbackResponse: pass
+        except SaaSError as exc:
+            self.pending_response=(exc.status,{'error':str(exc),'code':exc.code,'requestId':self.request_id})
+            self.saas_cookie=None
+        finally: self.defer_json=False
+        audit('saas_api_request',self.request_id,getattr(self,'audit_identity',None),method=method,
+              status=self.pending_response[0] if self.pending_response else 500)
+        if self.pending_response: send(self,*self.pending_response)
 
     def login(self):
         ensure_security()
@@ -737,8 +802,13 @@ class App(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     logging.basicConfig(level=logging.INFO,format='%(message)s')
+    from saas.readiness import enforce_startup
+    enforce_startup(pg_connect)
+    if SAAS_ENABLED:
+        from saas.deletion import start_worker as start_customer_cleanup
+        start_customer_cleanup(pg_connect)
 
-    if POSTGRES_ENABLED:
+    if POSTGRES_ENABLED and not SAAS_ENABLED:
         try: patient_chat_service()
         except Exception: print('Patient chat storage unavailable; requests will retry initialization.')
     host=os.getenv('APP_HOST','localhost')

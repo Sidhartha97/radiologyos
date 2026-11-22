@@ -10,6 +10,7 @@ type Props = {
   patientId: string; patientName: string; reportId: string | null; modality: string; open: boolean; editorBusy?: boolean
   currentReport: () => string; renderReport: (value: string) => string
   onInsert: (value: string, modality?: string) => void; onClose: () => void
+  reportScoped?: boolean
 }
 
 export default function PatientChat(props: Props) {
@@ -28,7 +29,7 @@ export default function PatientChat(props: Props) {
   const retry = useRef<{ body: string; id: string } | null>(null)
   const end = useRef<HTMLDivElement>(null)
   const busy = sending || Boolean(conversation.pending)
-  const url = `/api/patient-chat/${encodeURIComponent(props.patientId)}`
+  const url = props.reportScoped ? `/api/report-chat/${encodeURIComponent(props.reportId || '')}` : `/api/patient-chat/${encodeURIComponent(props.patientId)}`
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => { setInserted(null) }, [props.reportId, props.modality])
   useEffect(() => {
@@ -74,13 +75,14 @@ export default function PatientChat(props: Props) {
     submitting.current = true; setSending(true); setElapsed(0); setInserted(null)
     try {
       let request = { ...JSON.parse(body), requestId }
-      let response = await apiFetch('/api/rag/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const sendUrl = props.reportScoped ? url : '/api/rag/chat'
+      let response = await apiFetch(sendUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request) })
       let result = await response.json()
       if (response.status === 409 && result.code === 'ModalityConflict') {
         if (!window.confirm(result.error + '\nUse ' + result.detected + ' for this request? Cancel to revise the prompt or dropdown.')) return
         request = { ...request, confirmedModality: result.detected }
-        response = await apiFetch('/api/rag/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) })
+        response = await apiFetch(sendUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) })
         result = await response.json()
       }
       if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`)
@@ -96,7 +98,7 @@ export default function PatientChat(props: Props) {
   }
   const clear = async () => {
     if (clearing.pending || busy) return
-    if (!window.confirm(`Clear chat history for ${props.patientName}? Saved reports will remain.`)) return
+    if (!window.confirm(`Clear ${props.reportScoped ? 'this assigned report’s' : props.patientName + '’s'} chat history? Saved reports will remain.`)) return
     await clearing.run('clear', async () => {
       const response = await apiFetch(url, { method: 'DELETE' })
       const result = await response.json()
@@ -108,14 +110,14 @@ export default function PatientChat(props: Props) {
   return <aside className="report-chat" style={{ display: props.open ? undefined : 'none' }} aria-label="AI report assistant">
     <header className="chat-header"><span className="chat-brand"><Sparkles size={20}/></span>
       <div><h2>Report assistant</h2><span>{props.patientName} · {props.modality}</span></div>
-      <button className="chat-icon" aria-label={clearing.pending ? 'Clearing conversation' : 'Clear patient conversation'} aria-busy={!!clearing.pending} title="Clear patient conversation" disabled={busy || loading || !!clearing.pending} onClick={() => void clear()}>{clearing.pending ? <Spinner/> : <Trash2 size={17}/>}</button>
+      <button className="chat-icon" aria-label={clearing.pending ? 'Clearing conversation' : props.reportScoped ? 'Clear report conversation' : 'Clear patient conversation'} aria-busy={!!clearing.pending} title={props.reportScoped ? 'Clear report conversation' : 'Clear patient conversation'} disabled={busy || loading || !!clearing.pending} onClick={() => void clear()}>{clearing.pending ? <Spinner/> : <Trash2 size={17}/>}</button>
       <button className="chat-icon" aria-label="Close assistant" onClick={props.onClose}><X size={20}/></button>
     </header>
-    <div className="chat-safety">Patient chat is kept for 14 days after the last message. Review AI drafts before finalizing.</div>
+    <div className="chat-safety">{props.reportScoped ? 'Assigned-report chat' : 'Patient chat'} is kept for 14 days after the last message. Review AI drafts before finalizing.</div>
     <div className="chat-thread" role="log" aria-label="Patient conversation" aria-live="polite" aria-relevant="additions">
       {loading && <LoadingStatus>Loading this patient’s conversation…</LoadingStatus>}
       {(error || loadError || clearing.error) && <div className="chat-message chat-error" role="alert">{error || loadError || clearing.error}<ActionButton className="chat-insert" busy={loading} busyLabel="Loading chat…" onClick={() => { setError(''); clearing.clearError(); setLoading(true); setRefresh(value => value + 1) }}>Reload chat</ActionButton></div>}
-      {!loading && !conversation.messages.length && <div className="chat-empty"><Sparkles size={28}/><h3>Start with your findings</h3><p>Create a draft or ask for changes to the report in your editor. This conversation stays with {props.patientName}.</p><span>Follow-ups use the latest 5 messages and current report.</span></div>}
+      {!loading && !conversation.messages.length && <div className="chat-empty"><Sparkles size={28}/><h3>Start with your findings</h3><p>Create a draft or ask for changes to the report in your editor. {props.reportScoped ? 'This conversation is restricted to the assigned report.' : `This conversation stays with ${props.patientName}.`}</p><span>Follow-ups use the latest 5 messages and current report.</span></div>}
       {conversation.messages.map(message => {
         return <article key={message.id} className={`chat-message ${message.role}${message.error ? ' chat-error' : ''}`}>
           <div className="chat-author">{message.role === 'user' ? 'You' : 'Report assistant'} · {message.modality} · {new Date(message.createdAt).toLocaleString()}</div>
