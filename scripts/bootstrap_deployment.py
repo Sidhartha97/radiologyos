@@ -22,7 +22,12 @@ def bootstrap(config,master_secret,admin_email=None,recover_runtime_credential=F
     target={'host':config['POSTGRES_ENDPOINT'],'port':5432,'dbname':config['POSTGRES_DATABASE']}
     role='radiologyos_runtime'
     if runtime and any(runtime.get(key)!=value for key,value in {**target,'username':role}.items()):
-        raise ValueError('Runtime secret target differs from current infrastructure; operator review required')
+        if not recover_runtime_credential:
+            raise ValueError('Runtime secret target differs from current infrastructure; explicit recovery required')
+        # The operator explicitly requested recovery. Never reuse the old DB
+        # password/endpoint; recreate or rotate the runtime login on this DB,
+        # then replace the runtime secret with this instance's connection data.
+        runtime=None
     created=False
     with psycopg.connect(**target,user=owner['username'],password=owner['password'],sslmode='require',connect_timeout=8) as conn:
         if conn.execute('SELECT current_database()').fetchone()[0]!=target['dbname']: raise ValueError('Wrong database')
