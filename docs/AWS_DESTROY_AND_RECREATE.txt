@@ -4,7 +4,7 @@ Prepared: 18 October 2026
 IMPORTANT
 ---------
 This guide describes the current Terraform + EC2 + ECR deployment.
-The Docker Hub workflow is only a proposal and is not implemented.
+GitHub Actions builds and deploys images directly to ECR; Docker Hub is not used.
 Following the destroy steps permanently deletes this project's managed data,
 including reports, historical uploads, databases, Cognito users and ECR images.
 No report backup or data restoration is included.

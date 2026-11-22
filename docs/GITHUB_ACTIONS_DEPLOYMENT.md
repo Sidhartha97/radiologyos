@@ -1,133 +1,78 @@
-# GitHub Actions to EC2 deployment
+# GitHub Actions to EC2 with Amazon ECR
 
-This workflow builds the existing Dockerfile on GitHub Actions, pushes an
-immutable ARM64 image to a private Docker Hub repository, and asks
-the EC2 instance to pull/restart it through Systems Manager Run Command. It does
-not require an SSM tunnel or an inbound SSH rule. The EC2 instance continues to
-run the application using its instance role and runtime configuration in
-Secrets Manager. A separate Docker Hub read-only token is kept in a scoped
-Secrets Manager secret for EC2 image pulls.
+GitHub Actions verifies the project, builds an immutable ARM64 image, pushes it
+to the Terraform-managed private ECR repository, then tells EC2 to pull and run
+that image through Systems Manager Run Command. AWS access uses GitHub OIDC;
+there are no Docker Hub credentials or static AWS keys in GitHub.
 
-## Before provisioning
+## One-time AWS setup
 
-1. Create a **private GitHub repository** and push this project to its `main`
-   branch. Do not commit `.env`, Terraform state/plan files, AWS credentials,
-   uploads, or real patient documents.
-2. Edit `terraform/historical-reports.tfvars` and add the repository in the
-   exact `owner/repository` form:
+The Terraform configuration must set:
 
-   ```hcl
-   github_actions_repository = "YOUR_GITHUB_OWNER/radiology-reporting"
-   ```
+```hcl
+github_actions_repository = "Sidhartha97/radiologyos"
+```
 
-3. For temporary public-IP testing only, set the testing PC's current public
-   IPv4 address as a single `/32`:
-
-   ```hcl
-   testing_app_client_cidr = "YOUR_CURRENT_PUBLIC_IP/32"
-   ```
-
-   This opens HTTP port 8000 only to that address. Leave it blank to keep all
-   public web ingress closed. The app has no public HTTPS/domain setup here; use
-   synthetic data and test accounts only over this temporary HTTP endpoint.
-4. Create a private Docker Hub repository. Create one Docker Hub token with
-   write access for GitHub Actions and a separate read-only token for EC2.
-5. The Terraform stack is currently destroyed and the local state has no
-   managed resources. Check AWS account/profile, unique S3 names and any KMS
-   keys still pending deletion before applying. Terraform apply creates billable
-   resources including RDS, KMS, Secrets Manager and EC2.
-
-## Create the infrastructure
-
-From PowerShell:
+The testing host is enabled by `testing-host.auto.tfvars`. Apply the reviewed
+Terraform changes from PowerShell:
 
 ```powershell
 $env:AWS_PROFILE = "radiology-dev"
 Set-Location "C:\path\to\radiology-reporting\terraform"
-terraform init
-terraform plan -var-file="historical-reports.tfvars" -out="recreate.tfplan"
-# Review every create/replace/delete before proceeding.
-terraform apply "recreate.tfplan"
+terraform plan -var-file="historical-reports.tfvars" -out="ecr-cicd.tfplan"
+terraform show "ecr-cicd.tfplan"
+# Confirm the plan updates the GitHub Actions role and removes only the obsolete
+# Docker Hub pull secret, then apply that reviewed plan.
+terraform apply "ecr-cicd.tfplan"
 ```
 
-The testing host is enabled by `testing-host.auto.tfvars`. Terraform creates a
-GitHub OIDC provider and a role restricted to the repository's `main` branch,
-with only SSM deployment permissions. It creates a temporary
-single-IP port 8000 ingress rule only when `testing_app_client_cidr` is set.
+This enables the GitHub OIDC role to push only to this app's ECR repository and
+send SSM deployment commands to this EC2 instance. EC2 already has scoped ECR
+pull access. The obsolete Docker Hub pull secret is removed by Terraform.
 
-## First application bootstrap
+## Initial application bootstrap
 
-After the infrastructure is ready, install `boto3` locally and perform the
-explicit initial database/schema bootstrap and first image deployment:
+Run the explicit initial database/schema bootstrap and first ECR deployment
+from the project root. The RDS instance must be running:
 
 ```powershell
 Set-Location "C:\path\to\radiology-reporting"
-python -m pip install boto3
-python scripts/deploy_aws.py deploy --profile radiology-dev --approve-schema --admin-email sidharthachintu1997@gmail.com
+py -3.12 scripts/deploy_aws.py deploy --profile radiology-dev --approve-schema --admin-email sidharthachintu1997@gmail.com
 ```
 
-This deploy helper uses ECR and the EC2 instance. It explicitly applies the
-reviewed database migrations; it does not run Terraform. The admin invitation
-is sent only if the new Cognito pool needs that account. Review its output.
+This command builds and pushes the first image to ECR, applies the approved
+database migrations, configures the application, and starts the EC2 service.
+It does not run Terraform.
 
-## Configure GitHub Actions
+## GitHub Actions configuration
 
 In the GitHub repository, open **Settings → Secrets and variables → Actions →
-Variables** and add:
+Variables** and add these repository variables:
 
 | Variable | Value |
 | --- | --- |
 | `AWS_REGION` | `us-east-1` |
 | `AWS_ROLE_ARN` | `terraform output -raw github_actions_deploy_role_arn` |
 | `EC2_INSTANCE_ID` | `terraform output -raw testing_instance_id` |
-| `DOCKERHUB_IMAGE` | Docker Hub image name, e.g. `myuser/radiologyos` |
-| `DOCKERHUB_PULL_SECRET_ARN` | `terraform output -raw dockerhub_pull_secret_arn` |
+| `ECR_REPOSITORY_URI` | `terraform output -raw application_repository_url` |
 
-Add these **Actions secrets**:
+No Docker Hub secrets or AWS access keys are required. The workflow uses
+GitHub's OIDC identity to assume the role limited to this repository's `main`
+branch.
 
-| Secret | Value |
-| --- | --- |
-| `DOCKERHUB_USERNAME` | Docker Hub username |
-| `DOCKERHUB_TOKEN` | Docker Hub token with push permission |
+## Deploy changes
 
-After Terraform creates the pull-secret shell, add this JSON as its Secrets
-Manager secret value:
+Commit and push to `main`, or run **Actions → CI and EC2 deployment → Run
+workflow** on `main`. Pull requests run verification only. A successful main
+branch run builds and pushes an ARM64 image tagged with the commit SHA, deploys
+it through SSM, restarts the EC2 service, and checks `/api/health`. If health
+checks fail, the host attempts to restore the previous image.
 
-```json
-{"username":"YOUR_DOCKERHUB_USERNAME","token":"YOUR_READ_ONLY_DOCKERHUB_TOKEN"}
-```
-
-Use a separate read-only Docker Hub token for EC2. No static AWS keys are put
-in GitHub; AWS authentication uses GitHub OIDC. The workflow file is
-`.github/workflows/deploy.yml`.
-
-On each pull request to `main`, it installs the Python dependencies, runs the
-existing pytest suite, and builds the frontend. On a push to `main`, after those
-steps pass, it builds/pushes an ARM64 Docker Hub image tagged with that commit SHA, then
-uses SSM Run Command to pull it on EC2, restart the service, and check the
-health endpoint. If the new image fails the health check, the host attempts to
-restore the prior image.
-
-## Open the testing site
-
-When the ingress variable is set, get the address with:
+Open the app at the current testing IP from the single allowed client IP:
 
 ```powershell
-terraform output -raw testing_instance_public_ip
+terraform -chdir=terraform output -raw testing_instance_public_ip
 ```
 
-Browse to `http://<that-address>:8000/` from the configured test PC. Its
-temporary public IPv4 is allocated as an Elastic IP while the testing ingress
-is enabled. If your ISP changes your public IP, update the `/32` in the tfvars,
-review and apply a Terraform plan. For production, use a domain with HTTPS,
-secure cookies, a security review, and appropriate backup/restore controls
-before entering real credentials or clinical data.
-
-The repository currently has no Git remote configured. These files must be
-reviewed, committed, and pushed to the actual private GitHub repository before
-GitHub Actions can run. A workflow run cannot provision the initial AWS stack;
-the reviewed Terraform apply is a separate one-time setup. Before AWS variables
-are added, pushes run verification only. After infrastructure/bootstrap and
-GitHub variables/secrets are ready, run the workflow manually once from
-**Actions → CI and EC2 deployment → Run workflow**; later pushes to `main`
-deploy automatically.
+Use `http://<that-address>:8000/` only with synthetic data and test accounts.
+For real clinical data, configure HTTPS and complete a security review first.

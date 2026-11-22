@@ -78,14 +78,6 @@ resource "aws_secretsmanager_secret" "application_config" {
   recovery_window_in_days = 0
 }
 
-resource "aws_secretsmanager_secret" "dockerhub_pull" {
-  count                   = var.enable_testing_host ? 1 : 0
-  name                    = "${local.testing_name}/dockerhub-pull"
-  description             = "Read-only Docker Hub token used by EC2 to pull the app image"
-  kms_key_id              = aws_kms_key.radiology.arn
-  recovery_window_in_days = 0
-}
-
 resource "aws_ecr_repository" "application" {
   count                = var.enable_testing_host ? 1 : 0
   name                 = "${local.testing_name}-application"
@@ -208,6 +200,22 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
     Version = "2012-10-17"
     Statement = [
       {
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:CompleteLayerUpload",
+          "ecr:InitiateLayerUpload",
+          "ecr:PutImage",
+          "ecr:UploadLayerPart"
+        ]
+        Resource = aws_ecr_repository.application[0].arn
+      },
+      {
         Effect = "Allow"
         Action = ["ssm:SendCommand"]
         Resource = [
@@ -233,7 +241,6 @@ resource "aws_iam_role_policy" "testing_runtime" {
     [
       { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
       { Effect = "Allow", Action = ["ecr:DescribeImages", "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage", "ecr:PutImage", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload"], Resource = aws_ecr_repository.application[0].arn },
-      { Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = aws_secretsmanager_secret.dockerhub_pull[0].arn },
       { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${aws_s3_bucket.documents.arn}/deployment-bundles/*" }
     ]
   ) })
@@ -286,6 +293,5 @@ output "testing_instance_public_ip" { value = try(aws_eip.testing[0].public_ip, 
 output "testing_host_role_name" { value = try(aws_iam_role.testing_host[0].name, null) }
 output "application_repository_url" { value = try(aws_ecr_repository.application[0].repository_url, null) }
 output "github_actions_deploy_role_arn" { value = try(aws_iam_role.github_actions_deploy[0].arn, null) }
-output "dockerhub_pull_secret_arn" { value = try(aws_secretsmanager_secret.dockerhub_pull[0].arn, null) }
 output "runtime_database_secret_arn" { value = try(aws_secretsmanager_secret.runtime[0].arn, null) }
 output "application_config_secret_arn" { value = try(aws_secretsmanager_secret.application_config[0].arn, null) }
