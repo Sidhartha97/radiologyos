@@ -67,7 +67,9 @@ branch.
 
 Commit and push to `main`, or run **Actions → CI and EC2 deployment → Run
 workflow** on `main`. Pull requests run verification only. A successful main
-branch run builds and pushes an ARM64 image tagged with the commit SHA. With
+branch run builds and pushes an ARM64 image tagged with the commit SHA, workflow
+run ID, and attempt number. The unique attempt suffix permits safe retries with
+ECR immutable tags. With
 `AUTOSCALING_GROUP_NAME` unset it deploys through SSM to the single EC2 host.
 When the optional ALB/ASG Terraform mode is enabled and all three ASG variables
 are set, the workflow updates the image parameter, starts a rolling ASG instance

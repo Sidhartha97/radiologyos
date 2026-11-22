@@ -65,7 +65,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - name: Build and push immutable ARM64 image to ECR
         env:
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           docker buildx build \
             --platform linux/arm64 \
@@ -75,7 +75,7 @@ jobs:
       - name: Deploy image through Systems Manager
         if: env.AUTOSCALING_GROUP_NAME == ''
         env:
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           IMAGE_URI="${ECR_REPOSITORY_URI}:${IMAGE_TAG}"
@@ -129,7 +129,7 @@ jobs:
       - name: Roll out image to Auto Scaling Group
         if: env.AUTOSCALING_GROUP_NAME != ''
         env:
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           IMAGE_URI="${ECR_REPOSITORY_URI}:${IMAGE_TAG}"
