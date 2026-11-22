@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
 
-def bootstrap(config,master_secret,admin_email=None):
+def bootstrap(config,master_secret,admin_email=None,recover_runtime_credential=False):
     import boto3,psycopg
     from psycopg import sql
     from saas.schema import apply,grant_runtime
@@ -33,7 +33,15 @@ def bootstrap(config,master_secret,admin_email=None):
             runtime={**target,'username':role,'password':secrets.token_urlsafe(48)}
             conn.execute(sql.SQL('CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEDB NOCREATEROLE').format(sql.Identifier(role),sql.Literal(runtime['password'])))
             created=True
-        elif not runtime: raise ValueError('Runtime role exists without credentials; explicit recovery required')
+        elif not runtime:
+            if not recover_runtime_credential:
+                raise ValueError('Runtime role exists without credentials; explicit recovery required')
+            # A prior approved bootstrap can create the DB role and then fail
+            # before storing its password. Rotate that orphaned role only when
+            # the operator explicitly enables recovery.
+            runtime={**target,'username':role,'password':secrets.token_urlsafe(48)}
+            conn.execute(sql.SQL('ALTER ROLE {} WITH PASSWORD {}').format(sql.Identifier(role),sql.Literal(runtime['password'])))
+            created=True
         grant_runtime(conn,role)
     if created: sm.put_secret_value(SecretId=arn,SecretString=json.dumps(runtime))
     with psycopg.connect(**target,user=role,password=runtime['password'],sslmode='require',connect_timeout=8) as conn:
@@ -68,13 +76,14 @@ def main():
     parser.add_argument('--region',required=True)
     parser.add_argument('--admin-email')
     parser.add_argument('--approve-schema',action='store_true')
+    parser.add_argument('--recover-runtime-credential',action='store_true',help='Rotate the dedicated runtime DB role password if a previous bootstrap created the role but could not save its secret')
     args=parser.parse_args()
     if not args.approve_schema: parser.error('Reviewed migrations require --approve-schema')
     try:
         import boto3
         config=json.loads(boto3.client('secretsmanager',region_name=args.region).get_secret_value(SecretId=args.config_secret)['SecretString'])
         if config['AWS_REGION']!=args.region: raise ValueError('Region mismatch')
-        print(json.dumps({'bootstrap':bootstrap(config,args.master_secret,args.admin_email)}))
+        print(json.dumps({'bootstrap':bootstrap(config,args.master_secret,args.admin_email,args.recover_runtime_credential)}))
         return 0
     except Exception as exc:
         print(json.dumps({'errorCode':getattr(exc,'response',{}).get('Error',{}).get('Code',type(exc).__name__),'stage':'bootstrap','notice':'No credential details logged. Review partial completion before retrying.'}),file=sys.stderr)

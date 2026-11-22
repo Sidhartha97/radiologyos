@@ -152,10 +152,11 @@ def main():
         bootstrap_permission_added=False
         try:
             iam.put_role_policy(RoleName=role,PolicyName=policy,PolicyDocument=json.dumps({'Version':'2012-10-17','Statement':[
-                {'Effect':'Allow','Action':['secretsmanager:GetSecretValue'],'Resource':outputs['postgres_secret_arn']}]}))
+                {'Effect':'Allow','Action':['secretsmanager:GetSecretValue'],'Resource':outputs['postgres_secret_arn']},
+                {'Effect':'Allow','Action':['secretsmanager:PutSecretValue'],'Resource':outputs['runtime_database_secret_arn']}]}))
             bootstrap_permission_added=True
             time.sleep(10)
-            command=f'docker run --rm --network host -e AWS_DEFAULT_REGION={q(args.region)} {q(image)} python scripts/bootstrap_deployment.py --approve-schema --region {q(args.region)} --config-secret {q(outputs["application_config_secret_arn"])} --master-secret {q(outputs["postgres_secret_arn"])}'
+            command=f'docker run --rm --network host -e AWS_DEFAULT_REGION={q(args.region)} {q(image)} python scripts/bootstrap_deployment.py --approve-schema --recover-runtime-credential --region {q(args.region)} --config-secret {q(outputs["application_config_secret_arn"])} --master-secret {q(outputs["postgres_secret_arn"])}'
             if args.admin_email: command+=' --admin-email '+q(args.admin_email)
             result=run_command(ssm,instance,[command],'reviewed-bootstrap',600)
             print(result.get('StandardOutputContent',''))
