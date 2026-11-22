@@ -439,8 +439,18 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
       },
       {
         Effect   = "Allow"
-        Action   = ["autoscaling:StartInstanceRefresh", "autoscaling:DescribeInstanceRefreshes", "autoscaling:DescribeAutoScalingGroups", "autoscaling:SetDesiredCapacity", "elasticloadbalancing:DescribeTargetHealth"]
+        Action   = ["autoscaling:DescribeInstanceRefreshes", "autoscaling:DescribeAutoScalingGroups"]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["autoscaling:StartInstanceRefresh", "autoscaling:SetDesiredCapacity"]
         Resource = var.enable_alb_autoscaling ? aws_autoscaling_group.application[0].arn : "arn:${data.aws_partition.current.partition}:autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:autoScalingGroup:*:autoScalingGroupName/disabled"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["elasticloadbalancing:DescribeTargetHealth"]
+        Resource = var.enable_alb_autoscaling ? aws_lb_target_group.application[0].arn : "arn:${data.aws_partition.current.partition}:elasticloadbalancing:${var.aws_region}:${data.aws_caller_identity.current.account_id}:targetgroup/disabled/*"
       }
     ]
   })
