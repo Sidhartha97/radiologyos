@@ -53,8 +53,11 @@ Variables** and add these repository variables:
 | --- | --- |
 | `AWS_REGION` | `us-east-1` |
 | `AWS_ROLE_ARN` | `terraform output -raw github_actions_deploy_role_arn` |
-| `EC2_INSTANCE_ID` | `terraform output -raw testing_instance_id` |
+| `EC2_INSTANCE_ID` | `terraform output -raw testing_instance_id` (single-host mode) |
 | `ECR_REPOSITORY_URI` | `terraform output -raw application_repository_url` |
+| `AUTOSCALING_GROUP_NAME` | Optional: `terraform output -raw application_asg_name`; leave blank for the existing single-host deployment |
+| `APP_IMAGE_PARAMETER` | Optional: `terraform output -raw application_image_parameter_name` |
+| `APP_TARGET_GROUP_ARN` | Optional: `terraform output -raw application_target_group_arn` |
 
 No Docker Hub secrets or AWS access keys are required. The workflow uses
 GitHub's OIDC identity to assume the role limited to this repository's `main`
@@ -64,9 +67,12 @@ branch.
 
 Commit and push to `main`, or run **Actions → CI and EC2 deployment → Run
 workflow** on `main`. Pull requests run verification only. A successful main
-branch run builds and pushes an ARM64 image tagged with the commit SHA, deploys
-it through SSM, restarts the EC2 service, and checks `/api/health`. If health
-checks fail, the host attempts to restore the previous image.
+branch run builds and pushes an ARM64 image tagged with the commit SHA. With
+`AUTOSCALING_GROUP_NAME` unset it deploys through SSM to the single EC2 host.
+When the optional ALB/ASG Terraform mode is enabled and all three ASG variables
+are set, the workflow updates the image parameter, starts a rolling ASG instance
+refresh and waits for an ALB healthy target. The ASG launch template fetches the
+image parameter and scoped app secrets at instance boot.
 
 Open the app at the current testing IP from the single allowed client IP:
 

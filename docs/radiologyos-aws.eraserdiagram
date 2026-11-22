@@ -1,0 +1,67 @@
+cloud-architecture-diagram
+title RadiologyOS AWS Architecture · Development and Test
+direction right
+colorMode pastel
+styleMode shadow
+typeface clean
+textSize medium
+
+// CI/CD: only pushes to main deploy. PRs run verification only.
+Developer [icon: tech-visual-studio-code, label: "Developer PC · code + push"]
+GitHub [icon: tech-github, label: "GitHub repository · main"]
+Actions [icon: tech-github-actions, label: "GitHub Actions · Python tests + frontend build + ARM64 image"]
+
+AWS Cloud [icon: aws-cloud] {
+  Region [icon: aws-region, label: "us-east-1"] {
+    OIDC [icon: aws-identity-and-access-management, label: "IAM deploy role · GitHub OIDC"]
+    ECR [icon: aws-ecr, label: "Amazon ECR · immutable SHA-tagged image"]
+    SSM [icon: aws-systems-manager, label: "Systems Manager Run Command · deploy + health check"]
+
+    VPC [icon: aws-vpc, label: "Default VPC · test deployment"] {
+      PublicTestIngress [icon: aws-elastic-ip-address, label: "Public IPv4 · HTTP :8000 · one allowed /32"]
+      App [icon: aws-ec2, label: "Amazon EC2 t4g.micro · Docker · React + Python API"]
+      Database [icon: aws-rds, label: "Amazon RDS PostgreSQL 16 · private · tenant data + RLS"]
+    }
+
+    Cognito [icon: aws-cognito, label: "Amazon Cognito · user pool + invitations"]
+    Reports [icon: aws-s3, label: "Amazon S3 · historical originals + normalized + final reports"]
+    Jobs [icon: aws-dynamodb, label: "Amazon DynamoDB · import/job metadata"]
+    Secrets [icon: aws-secrets-manager, label: "AWS Secrets Manager · app config + runtime DB secret"]
+    KnowledgeBase [icon: aws-bedrock, label: "Amazon Bedrock Knowledge Base · tenant + modality filters"]
+    Embeddings [icon: aws-bedrock, label: "Amazon Titan Text Embeddings"]
+    VectorIndex [icon: aws-s3, label: "Amazon S3 Vectors · encrypted vector index"]
+    Generation [icon: aws-bedrock, label: "Bedrock Runtime · configurable model · clinician-reviewed draft"]
+    Key [icon: aws-key-management-service, label: "AWS KMS · encryption key"]
+    RuntimeRole [icon: aws-identity-and-access-management, label: "EC2 instance profile · scoped runtime IAM permissions"]
+  }
+}
+
+Developer > GitHub: push code
+GitHub > Actions: trigger workflow
+Actions > OIDC: assume role using short-lived OIDC credentials
+OIDC > ECR: build and publish ARM64 image
+OIDC > SSM: send deployment command
+SSM > App: pull image, restart service, health-check
+ECR > App: instance-role image pull
+
+PublicTestIngress > App: HTTP allowed from configured client /32
+App > Cognito: authenticate and validate identity
+App > Database: SQL · TCP 5432 · tenant-scoped operations
+App > Reports: upload and read report files
+App > Jobs: historical import and job state
+App > Secrets: read scoped configuration
+App > KnowledgeBase: retrieve with mandatory tenant + modality filters
+Reports > KnowledgeBase: S3 data source ingestion and chunking
+KnowledgeBase > Embeddings: embed and retrieve text
+Embeddings > VectorIndex: write and query vectors
+KnowledgeBase > VectorIndex: similarity search
+App > Generation: prompt + retrieved references → draft
+RuntimeRole > App: instance profile permissions · no static AWS keys
+Key > Reports: SSE-KMS
+Key > Database: storage encryption
+Key > Jobs: table encryption
+Key > VectorIndex: vector index encryption
+Key > Secrets: secret encryption
+
+// Current topology is intentionally low-cost and is not production hardened.
+TestLimits [icon: aws-warning, label: "TEST ONLY · synthetic records · one EC2 · no ALB, NAT, HTTPS endpoint, or HA tier"]

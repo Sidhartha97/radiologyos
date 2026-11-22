@@ -177,3 +177,31 @@ variable "db_final_snapshot_identifier" {
   description = "Unique final snapshot name required if db_skip_final_snapshot is false."
   default     = null
 }
+
+variable "enable_dedicated_vpc" {
+  type        = bool
+  default     = false
+  description = "Create a dedicated two-AZ VPC for the ALB, private application tier, and staged RDS migration."
+}
+
+variable "enable_rds_vpc_migration" {
+  type        = bool
+  default     = false
+  description = "Snapshot the existing RDS instance and restore a separate copy into the dedicated VPC. The source RDS remains in place."
+}
+
+variable "dedicated_vpc_cidr" {
+  type        = string
+  default     = "10.40.0.0/16"
+  description = "Non-overlapping CIDR for the dedicated RadiologyOS VPC."
+  validation {
+    condition     = can(cidrnetmask(var.dedicated_vpc_cidr))
+    error_message = "dedicated_vpc_cidr must be a valid IPv4 CIDR."
+  }
+}
+
+variable "rds_migration_snapshot_name" {
+  type        = string
+  default     = "radiologyos-dev-pre-dedicated-vpc"
+  description = "Unique manual snapshot identifier used to preserve the source database during VPC migration."
+}

@@ -16,6 +16,8 @@ It provisions:
 
 ## Deploy the infrastructure
 
+For the dedicated VPC and staged RDS snapshot migration, follow [`../docs/DEDICATED_VPC_RDS_MIGRATION.md`](../docs/DEDICATED_VPC_RDS_MIGRATION.md) before applying. The existing source database is retained; do not skip the plan review or the maintenance window.
+
 From this directory:
 
 ```powershell
@@ -34,7 +36,7 @@ Terraform does not read the application's `.env`. Use the existing `radiology-de
 
 For optional local role assumption, set `local_developer_principal_arn` to your IAM user/role ARN. This does not create credentials or attach administrator permissions. The application role supports later EC2 hosting through `application_instance_profile_name`; no EC2 instance or installation is provisioned. Your CLI user does not automatically receive this role's permissions.
 
-An existing default VPC with subnets in at least two Availability Zones is required. RDS defaults to private: local PC access needs a VPN/tunnel/network route. For explicitly temporary public development access, set `db_publicly_accessible=true` and `dev_client_cidr` to your PC's public IPv4 `/32`. Broad CIDRs and public RDS without a PC address are rejected. Keep RDS private for production.
+The legacy mode uses the default VPC. The dedicated mode creates its own two-AZ VPC, ALB public subnets, private app subnets, and isolated private DB subnets. RDS is private by default. For a live source-to-dedicated-VPC migration, use the staged procedure in `../docs/DEDICATED_VPC_RDS_MIGRATION.md`; do not use the legacy temporary public-RDS setting for the destination.
 
 The KB explicitly uses FLOAT32 embeddings matching the vector index dimensions. Defaults: Titan V2, 1024 dimensions, 400-token fixed chunks, 15% overlap. `AMAZON_BEDROCK_TEXT` and `AMAZON_BEDROCK_METADATA` are non-filterable as required by [AWS](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base-setup.html). Keep custom metadata within the Bedrock/S3 Vectors limits; do not place clinical document text in sidecars.
 

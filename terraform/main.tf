@@ -179,6 +179,7 @@ resource "aws_security_group" "application" {
 }
 
 resource "aws_security_group" "database" {
+  count       = 0
   name        = "${var.project_name}-${var.environment}-postgres"
   description = "Private PostgreSQL security group"
   vpc_id      = data.aws_vpc.default.id
@@ -193,8 +194,9 @@ resource "aws_security_group" "database" {
 # Manage both database rules independently; mixing inline ingress with a
 # separate PC rule causes Terraform to remove/recreate the other rule.
 resource "aws_security_group_rule" "database_application" {
+  count                    = 0
   type                     = "ingress"
-  security_group_id        = aws_security_group.database.id
+  security_group_id        = aws_security_group.database[0].id
   source_security_group_id = aws_security_group.application.id
   protocol                 = "tcp"
   from_port                = 5432
@@ -203,9 +205,9 @@ resource "aws_security_group_rule" "database_application" {
 }
 
 resource "aws_security_group_rule" "database_dev_pc" {
-  count             = var.db_publicly_accessible && var.dev_client_cidr != "" ? 1 : 0
+  count             = 0
   type              = "ingress"
-  security_group_id = aws_security_group.database.id
+  security_group_id = aws_security_group.database[0].id
   protocol          = "tcp"
   from_port         = 5432
   to_port           = 5432
@@ -214,11 +216,13 @@ resource "aws_security_group_rule" "database_dev_pc" {
 }
 
 resource "aws_db_subnet_group" "postgres" {
+  count      = 0
   name       = "${var.project_name}-${var.environment}-postgres"
   subnet_ids = data.aws_subnets.default.ids
 }
 
 resource "aws_db_instance" "postgres" {
+  count                         = 0
   identifier                    = "${var.project_name}-${var.environment}-postgres"
   engine                        = "postgres"
   engine_version                = "16"
@@ -233,8 +237,8 @@ resource "aws_db_instance" "postgres" {
   manage_master_user_password   = true
   master_user_secret_kms_key_id = aws_kms_key.radiology.arn
   port                          = 5432
-  db_subnet_group_name          = aws_db_subnet_group.postgres.name
-  vpc_security_group_ids        = [aws_security_group.database.id]
+  db_subnet_group_name          = aws_db_subnet_group.postgres[0].name
+  vpc_security_group_ids        = [aws_security_group.database[0].id]
   publicly_accessible           = var.db_publicly_accessible
   multi_az                      = var.db_multi_az
   backup_retention_period       = var.db_backup_retention_period
@@ -254,6 +258,40 @@ resource "aws_db_instance" "postgres" {
       condition     = var.db_skip_final_snapshot || var.db_final_snapshot_identifier != null
       error_message = "Set a unique db_final_snapshot_identifier when db_skip_final_snapshot is false."
     }
+  }
+}
+
+# Create a fresh DB in the dedicated VPC. Keep the current DB as a rollback copy.
+resource "aws_db_instance" "postgres_dedicated" {
+  count                         = var.enable_dedicated_vpc ? 1 : 0
+  identifier                    = "${var.project_name}-${var.environment}-postgres-vpc"
+  engine                        = "postgres"
+  engine_version                = "16"
+  instance_class                = var.db_instance_class
+  allocated_storage             = var.db_allocated_storage
+  max_allocated_storage         = 200
+  storage_type                  = "gp3"
+  storage_encrypted             = true
+  kms_key_id                    = aws_kms_key.radiology.arn
+  db_name                       = var.db_name
+  username                      = var.db_username
+  manage_master_user_password   = true
+  master_user_secret_kms_key_id = aws_kms_key.radiology.arn
+  port                          = 5432
+  db_subnet_group_name          = aws_db_subnet_group.postgres_dedicated[0].name
+  vpc_security_group_ids        = [aws_security_group.database_dedicated[0].id]
+  publicly_accessible           = false
+  multi_az                      = var.db_multi_az
+  backup_retention_period       = var.db_backup_retention_period
+  copy_tags_to_snapshot         = true
+  deletion_protection           = var.db_deletion_protection
+  skip_final_snapshot           = var.db_skip_final_snapshot
+  final_snapshot_identifier     = var.db_skip_final_snapshot ? null : "${var.project_name}-${var.environment}-postgres-vpc-final"
+  apply_immediately             = false
+  auto_minor_version_upgrade    = true
+  tags = {
+    Name    = "${var.project_name}-${var.environment}-postgres-dedicated-vpc"
+    Purpose = "Fresh dedicated VPC database"
   }
 }
 
@@ -527,7 +565,7 @@ resource "aws_iam_role_policy" "application" {
       {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = aws_db_instance.postgres.master_user_secret[0].secret_arn
+        Resource = aws_db_instance.postgres_dedicated[0].master_user_secret[0].secret_arn
       },
       {
         Effect   = "Allow"
@@ -628,6 +666,6 @@ resource "aws_instance" "radiology" {
     systemctl enable --now nginx
   USERDATA
 
-  depends_on = [aws_db_instance.postgres, aws_bedrockagent_data_source.reports]
+  depends_on = [aws_db_instance.postgres_dedicated, aws_bedrockagent_data_source.reports]
 }
 */

@@ -5,6 +5,27 @@ variable "enable_testing_host" {
   default = false
 }
 
+variable "enable_alb_autoscaling" {
+  type        = bool
+  default     = false
+  description = "Create an HTTP Application Load Balancer and an ARM Auto Scaling Group for the optional testing host. Adds ongoing AWS cost."
+}
+
+variable "autoscaling_min_size" {
+  type    = number
+  default = 1
+}
+
+variable "autoscaling_max_size" {
+  type    = number
+  default = 2
+}
+
+variable "autoscaling_cpu_target" {
+  type    = number
+  default = 60
+}
+
 variable "testing_app_client_cidr" {
   type        = string
   default     = ""
@@ -54,12 +75,176 @@ data "aws_subnet" "testing_candidates" {
 }
 
 locals {
-  testing_name = "${var.project_name}-${var.environment}"
-  testing_subnets = sort([for subnet in data.aws_subnet.testing_candidates : subnet.id
-  if subnet.availability_zone == aws_db_instance.postgres.availability_zone])
+  testing_name    = "${var.project_name}-${var.environment}"
+  testing_subnets = sort([for subnet in data.aws_subnet.testing_candidates : subnet.id])
   # Keep the runtime role separate from the database operator/master identity.
   testing_base_statements = [for statement in jsondecode(aws_iam_role_policy.application.policy).Statement : statement
   if !contains(statement.Action, "secretsmanager:GetSecretValue")]
+}
+
+resource "aws_security_group" "load_balancer" {
+  count       = var.enable_testing_host && var.enable_alb_autoscaling && !var.enable_dedicated_vpc ? 1 : 0
+  name        = "${local.testing_name}-alb"
+  description = "HTTP ingress to the test application load balancer"
+  vpc_id      = data.aws_vpc.default.id
+  egress {
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group_rule" "load_balancer_http" {
+  count             = var.enable_testing_host && var.enable_alb_autoscaling && !var.enable_dedicated_vpc && var.testing_app_client_cidr != "" ? 1 : 0
+  type              = "ingress"
+  security_group_id = aws_security_group.load_balancer[0].id
+  protocol          = "tcp"
+  from_port         = 80
+  to_port           = 80
+  cidr_blocks       = [var.testing_app_client_cidr]
+  description       = "Test HTTP access from the configured client /32 only"
+}
+
+resource "aws_security_group_rule" "application_from_alb" {
+  count                    = var.enable_testing_host && var.enable_alb_autoscaling && !var.enable_dedicated_vpc ? 1 : 0
+  type                     = "ingress"
+  security_group_id        = aws_security_group.application.id
+  source_security_group_id = aws_security_group.load_balancer[0].id
+  protocol                 = "tcp"
+  from_port                = 8000
+  to_port                  = 8000
+  description              = "Application traffic only from the ALB"
+}
+
+resource "aws_ssm_parameter" "application_image" {
+  count       = var.enable_testing_host && var.enable_alb_autoscaling ? 1 : 0
+  name        = "/${local.testing_name}/application-image"
+  description = "Current immutable RadiologyOS ECR image URI for ASG instances"
+  type        = "String"
+  value       = "bootstrap"
+  lifecycle { ignore_changes = [value] }
+}
+
+resource "aws_lb" "application" {
+  count              = var.enable_testing_host && var.enable_alb_autoscaling ? 1 : 0
+  name               = substr("${local.testing_name}-alb", 0, 32)
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [var.enable_dedicated_vpc ? aws_security_group.load_balancer_dedicated[0].id : aws_security_group.load_balancer[0].id]
+  subnets            = var.enable_dedicated_vpc ? aws_subnet.public[*].id : data.aws_subnets.default.ids
+  tags               = { Name = "${local.testing_name}-alb" }
+  lifecycle {
+    precondition {
+      condition     = var.testing_app_client_cidr != ""
+      error_message = "Set testing_app_client_cidr to one IPv4 /32 before enabling the public HTTP ALB."
+    }
+  }
+}
+
+resource "aws_lb_target_group" "application" {
+  count       = var.enable_testing_host && var.enable_alb_autoscaling ? 1 : 0
+  name        = substr("${local.testing_name}-app", 0, 32)
+  port        = 8000
+  protocol    = "HTTP"
+  vpc_id      = var.enable_dedicated_vpc ? aws_vpc.dedicated[0].id : data.aws_vpc.default.id
+  target_type = "instance"
+  health_check {
+    enabled             = true
+    path                = "/api/health"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  count             = var.enable_testing_host && var.enable_alb_autoscaling ? 1 : 0
+  load_balancer_arn = aws_lb.application[0].arn
+  port              = 80
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.application[0].arn
+  }
+}
+
+resource "aws_launch_template" "application" {
+  count                  = var.enable_testing_host && var.enable_alb_autoscaling ? 1 : 0
+  name_prefix            = "${local.testing_name}-asg-"
+  image_id               = data.aws_ami.testing[0].id
+  instance_type          = var.testing_instance_type
+  update_default_version = true
+  vpc_security_group_ids = [var.enable_dedicated_vpc ? aws_security_group.application_dedicated[0].id : aws_security_group.application.id]
+  iam_instance_profile { name = aws_iam_instance_profile.testing_host[0].name }
+  user_data = base64encode(templatefile("${path.module}/../deployment/asg_bootstrap.sh.tftpl", {
+    region            = var.aws_region
+    config_secret_arn = aws_secretsmanager_secret.application_config[0].arn
+    image_parameter   = aws_ssm_parameter.application_image[0].name
+  }))
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_type           = "gp3"
+      volume_size           = 8
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+  tag_specifications {
+    resource_type = "instance"
+    tags          = { Name = "${local.testing_name}-app-asg" }
+  }
+  depends_on = [aws_iam_role_policy.testing_runtime]
+}
+
+resource "aws_autoscaling_group" "application" {
+  count                     = var.enable_testing_host && var.enable_alb_autoscaling ? 1 : 0
+  name                      = "${local.testing_name}-application"
+  min_size                  = var.autoscaling_min_size
+  max_size                  = var.autoscaling_max_size
+  desired_capacity          = var.autoscaling_min_size
+  vpc_zone_identifier       = var.enable_dedicated_vpc ? aws_subnet.application_private[*].id : data.aws_subnets.default.ids
+  target_group_arns         = [aws_lb_target_group.application[0].arn]
+  health_check_type         = "ELB"
+  health_check_grace_period = 600
+  launch_template {
+    id      = aws_launch_template.application[0].id
+    version = "$Latest"
+  }
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50
+      instance_warmup        = 600
+    }
+  }
+  tag {
+    key                 = "Name"
+    value               = "${local.testing_name}-application-asg"
+    propagate_at_launch = true
+  }
+  lifecycle { ignore_changes = [desired_capacity] }
+  depends_on = [aws_lb_listener.http]
+}
+
+resource "aws_autoscaling_policy" "cpu_target" {
+  count                     = var.enable_testing_host && var.enable_alb_autoscaling ? 1 : 0
+  name                      = "${local.testing_name}-cpu-target"
+  autoscaling_group_name    = aws_autoscaling_group.application[0].name
+  policy_type               = "TargetTrackingScaling"
+  estimated_instance_warmup = 300
+  target_tracking_configuration {
+    predefined_metric_specification { predefined_metric_type = "ASGAverageCPUUtilization" }
+    target_value = var.autoscaling_cpu_target
+  }
 }
 
 resource "aws_secretsmanager_secret" "runtime" {
@@ -159,9 +344,20 @@ resource "aws_iam_role_policy_attachment" "testing_ssm" {
 }
 
 resource "aws_security_group_rule" "testing_web" {
-  count             = var.enable_testing_host && var.testing_app_client_cidr != "" ? 1 : 0
+  count             = var.enable_testing_host && !var.enable_alb_autoscaling && !var.enable_dedicated_vpc && var.testing_app_client_cidr != "" ? 1 : 0
   type              = "ingress"
   security_group_id = aws_security_group.application.id
+  protocol          = "tcp"
+  from_port         = 8000
+  to_port           = 8000
+  cidr_blocks       = [var.testing_app_client_cidr]
+  description       = "Temporary plain-HTTP testing access from the configured PC only"
+}
+
+resource "aws_security_group_rule" "testing_web_dedicated" {
+  count             = var.enable_testing_host && var.enable_dedicated_vpc && !var.enable_alb_autoscaling && var.testing_app_client_cidr != "" ? 1 : 0
+  type              = "ingress"
+  security_group_id = aws_security_group.application_dedicated[0].id
   protocol          = "tcp"
   from_port         = 8000
   to_port           = 8000
@@ -235,6 +431,16 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
         Effect   = "Allow"
         Action   = ["ssm:GetCommandInvocation"]
         Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:PutParameter"]
+        Resource = var.enable_alb_autoscaling ? aws_ssm_parameter.application_image[0].arn : "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/disabled"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["autoscaling:StartInstanceRefresh", "autoscaling:DescribeInstanceRefreshes", "autoscaling:DescribeAutoScalingGroups", "autoscaling:SetDesiredCapacity", "elasticloadbalancing:DescribeTargetHealth"]
+        Resource = var.enable_alb_autoscaling ? aws_autoscaling_group.application[0].arn : "arn:${data.aws_partition.current.partition}:autoscaling:${var.aws_region}:${data.aws_caller_identity.current.account_id}:autoScalingGroup:*:autoScalingGroupName/disabled"
       }
     ]
   })
@@ -249,7 +455,8 @@ resource "aws_iam_role_policy" "testing_runtime" {
     [
       { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
       { Effect = "Allow", Action = ["ecr:DescribeImages", "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage", "ecr:PutImage", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload"], Resource = aws_ecr_repository.application[0].arn },
-      { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${aws_s3_bucket.documents.arn}/deployment-bundles/*" }
+      { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${aws_s3_bucket.documents.arn}/deployment-bundles/*" },
+      { Effect = "Allow", Action = ["ssm:GetParameter"], Resource = var.enable_alb_autoscaling ? aws_ssm_parameter.application_image[0].arn : "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/disabled" }
     ]
   ) })
 }
@@ -258,9 +465,9 @@ resource "aws_instance" "testing" {
   count                       = var.enable_testing_host ? 1 : 0
   ami                         = data.aws_ami.testing[0].id
   instance_type               = var.testing_instance_type
-  subnet_id                   = try(local.testing_subnets[0], null)
+  subnet_id                   = var.enable_dedicated_vpc ? aws_subnet.public[0].id : try(local.testing_subnets[0], null)
   associate_public_ip_address = true # Outbound SSM/ECR without a paid NAT gateway.
-  vpc_security_group_ids      = [aws_security_group.application.id]
+  vpc_security_group_ids      = [var.enable_dedicated_vpc ? aws_security_group.application_dedicated[0].id : aws_security_group.application.id]
   iam_instance_profile        = aws_iam_instance_profile.testing_host[0].name
   user_data_replace_on_change = true
   user_data = templatefile("${path.module}/../deployment/ec2_bootstrap.sh.tftpl", {
@@ -282,8 +489,8 @@ resource "aws_instance" "testing" {
   tags = { Name = "${local.testing_name}-testing-host" }
   lifecycle {
     precondition {
-      condition     = length(local.testing_subnets) > 0
-      error_message = "No default-VPC subnet in the RDS availability zone; review the network plan."
+      condition     = var.enable_dedicated_vpc || length(local.testing_subnets) > 0
+      error_message = "No usable subnet for the testing host; review the network plan."
     }
   }
   depends_on = [aws_iam_role_policy.testing_runtime, aws_iam_role_policy_attachment.testing_ssm]
@@ -303,3 +510,4 @@ output "application_repository_url" { value = try(aws_ecr_repository.application
 output "github_actions_deploy_role_arn" { value = try(aws_iam_role.github_actions_deploy[0].arn, null) }
 output "runtime_database_secret_arn" { value = try(aws_secretsmanager_secret.runtime[0].arn, null) }
 output "application_config_secret_arn" { value = try(aws_secretsmanager_secret.application_config[0].arn, null) }
+

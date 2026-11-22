@@ -49,6 +49,9 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION }}
       EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
       ECR_REPOSITORY_URI: ${{ vars.ECR_REPOSITORY_URI }}
+      AUTOSCALING_GROUP_NAME: ${{ vars.AUTOSCALING_GROUP_NAME }}
+      APP_IMAGE_PARAMETER: ${{ vars.APP_IMAGE_PARAMETER }}
+      APP_TARGET_GROUP_ARN: ${{ vars.APP_TARGET_GROUP_ARN }}
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
@@ -70,6 +73,7 @@ jobs:
             --tag "${ECR_REPOSITORY_URI}:${IMAGE_TAG}" \
             --push .
       - name: Deploy image through Systems Manager
+        if: env.AUTOSCALING_GROUP_NAME == ''
         env:
           IMAGE_TAG: ${{ github.sha }}
         run: |
@@ -121,3 +125,35 @@ jobs:
           done
           echo "Timed out waiting for EC2 deployment; inspect SSM command $COMMAND_ID."
           exit 1
+
+      - name: Roll out image to Auto Scaling Group
+        if: env.AUTOSCALING_GROUP_NAME != ''
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE_URI="${ECR_REPOSITORY_URI}:${IMAGE_TAG}"
+          aws ssm put-parameter --name "$APP_IMAGE_PARAMETER" --type String --value "$IMAGE_URI" --overwrite >/dev/null
+          REFRESH_ID="$(aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name "$AUTOSCALING_GROUP_NAME" \
+            --preferences '{"MinHealthyPercentage":50,"InstanceWarmup":600,"SkipMatching":true}' \
+            --query InstanceRefreshId --output text)"
+          echo "Started rolling refresh: $REFRESH_ID"
+          for attempt in $(seq 1 120); do
+            STATUS="$(aws autoscaling describe-instance-refreshes \
+              --auto-scaling-group-name "$AUTOSCALING_GROUP_NAME" \
+              --instance-refresh-ids "$REFRESH_ID" \
+              --query 'InstanceRefreshes[0].Status' --output text)"
+            case "$STATUS" in
+              Successful) break ;;
+              Failed|Cancelled|RollbackFailed)
+                aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$AUTOSCALING_GROUP_NAME" --instance-refresh-ids "$REFRESH_ID" --output json
+                exit 1 ;;
+            esac
+            sleep 10
+          done
+          test "${STATUS:-}" = Successful || { echo 'Timed out waiting for Auto Scaling refresh.' >&2; exit 1; }
+          HEALTHY="$(aws elbv2 describe-target-health --target-group-arn "$APP_TARGET_GROUP_ARN" \
+            --query 'length(TargetHealthDescriptions[?TargetHealth.State==`healthy`])' --output text)"
+          test "$HEALTHY" -ge 1
+          echo "ASG refresh completed; healthy targets: $HEALTHY"
