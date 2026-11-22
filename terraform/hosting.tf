@@ -450,7 +450,7 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
       {
         Effect   = "Allow"
         Action   = ["elasticloadbalancing:DescribeTargetHealth"]
-        Resource = var.enable_alb_autoscaling ? aws_lb_target_group.application[0].arn : "arn:${data.aws_partition.current.partition}:elasticloadbalancing:${var.aws_region}:${data.aws_caller_identity.current.account_id}:targetgroup/disabled/*"
+        Resource = "*"
       }
     ]
   })
