@@ -214,6 +214,7 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
       {
         Effect = "Allow"
         Action = [
+          "ecr:BatchGetImage",
           "ecr:BatchCheckLayerAvailability",
           "ecr:CompleteLayerUpload",
           "ecr:InitiateLayerUpload",
