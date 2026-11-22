@@ -92,7 +92,7 @@ sequenceDiagram
   UI->>API: Draft request + current report/chat context
   API->>Policy: Verify workspace, assignment, AI permission and feature gate
   Policy-->>API: Authorized tenant and capability
-  API->>API: Resolve modality; reject missing or conflicting modality
+  API->>API: Resolve modality and reject missing or conflicting modality
   API->>KB: Search prompt with mandatory tenant_id AND modality filters
   KB-->>API: Ranked chunks + source metadata and scores
   API->>API: Re-check metadata, tenant S3 prefix, modality and source location
