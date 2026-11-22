@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../apiFetch'
 import { ActionButton, useAction } from '../Loading'
+import { createRequestId } from '../requestId'
 
 type Invitation = { id: string; tenantId: string; email: string; status: string; errorCode?: string }
 
 export default function AccountCreation({ onCreated, demoMode = false }: { onCreated: () => Promise<void>; demoMode?: boolean }) {
   const [form, setForm] = useState({ kind: 'HOSPITAL', name: '', email: '', maxUsers: 5, allowStaffCreation: true, status: 'PENDING', reason: '' })
-  const [requestId, setRequestId] = useState(() => crypto.randomUUID())
+  const [requestId, setRequestId] = useState(createRequestId)
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -27,7 +28,7 @@ export default function AccountCreation({ onCreated, demoMode = false }: { onCre
       const response = await apiFetch('/api/platform/tenants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, requestId }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Could not create account.')
-      setRequestId(crypto.randomUUID()); setForm({ ...form, name: '', email: '', reason: '' }); await load(); await onCreated()
+      setRequestId(createRequestId()); setForm({ ...form, name: '', email: '', reason: '' }); await load(); await onCreated()
       setSuccess('Account created. Send its invitation below to complete setup.')
     }) }}><div className="modal-grid" inert={Boolean(action.pending)}>
       <label>Account type<select value={form.kind} onChange={event => setForm({ ...form, kind: event.target.value, maxUsers: event.target.value === 'INDIVIDUAL' ? 1 : 5, allowStaffCreation: event.target.value === 'HOSPITAL' })}><option value="HOSPITAL">Hospital with administrator</option><option value="INDIVIDUAL">Individual radiologist</option></select></label>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch, getWorkspaceForRequests } from '../apiFetch'
+import { createRequestId } from '../requestId'
 import type { Lease } from './types'
 
 export function useEditorLease(reportId: string | null, version: number | undefined, hospital: boolean, enabled: boolean) {
@@ -9,7 +10,7 @@ export function useEditorLease(reportId: string | null, version: number | undefi
   const current = useRef<Lease | null>(null)
   const acquiring = useRef(false)
   const alive = useRef(true)
-  const editingSession = useRef(crypto.randomUUID())
+  const editingSession = useRef(createRequestId())
   const workspace = getWorkspaceForRequests()
   const update = (value: Lease | null) => { current.current = value; setLease(value) }
   const request = async (action: string, value: unknown) => {

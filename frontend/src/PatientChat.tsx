@@ -3,6 +3,7 @@ import { ArrowUp, LoaderCircle, Sparkles, Trash2, X } from 'lucide-react'
 import './report-chat.css'
 import { apiFetch } from './apiFetch'
 import { ActionButton, LoadingStatus, Spinner, useAction } from './Loading'
+import { createRequestId } from './requestId'
 
 type Message = { id: string; role: 'user' | 'assistant'; text: string; draft?: string; error?: boolean; createdAt: string; reportId?: string; modality?: string }
 type Conversation = { messages: Message[]; pending: { id: string; startedAt: string } | null; expiresAt?: string }
@@ -70,7 +71,7 @@ export default function PatientChat(props: Props) {
     const current = props.currentReport()
     const body = JSON.stringify({ patientId: props.patientId, reportId: props.reportId, modality: props.modality,
       prompt: instruction, currentReport: current })
-    const requestId = retry.current?.body === body ? retry.current.id : crypto.randomUUID()
+    const requestId = retry.current?.body === body ? retry.current.id : createRequestId()
     retry.current = { body, id: requestId }
     submitting.current = true; setSending(true); setElapsed(0); setInserted(null)
     try {
