@@ -64,7 +64,11 @@ resource "aws_s3_bucket_cors_configuration" "library" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["POST"]
-    allowed_origins = concat(var.library_allowed_origins, var.enable_testing_host && var.testing_app_client_cidr != "" ? ["http://${aws_eip.testing[0].public_ip}:8000"] : [])
+    allowed_origins = concat(
+      var.library_allowed_origins,
+      var.enable_testing_host && var.testing_app_client_cidr != "" ? ["http://${aws_eip.testing[0].public_ip}:8000"] : [],
+      var.enable_testing_host && var.enable_alb_autoscaling ? ["http://${aws_lb.application[0].dns_name}"] : []
+    )
     expose_headers  = ["ETag", "x-amz-request-id"]
     max_age_seconds = 300
   }

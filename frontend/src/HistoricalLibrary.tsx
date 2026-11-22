@@ -25,7 +25,7 @@ function directUpload(url:string, fields:Record<string,string>, file:File, progr
   return new Promise<void>((resolve,reject)=>{
     const xhr=new XMLHttpRequest(); xhr.open('POST',url); xhr.timeout=120000
     xhr.upload.onprogress=e=>{if(e.lengthComputable) progress(Math.round(e.loaded/e.total*100))}
-    xhr.onerror=()=>reject(new Error('S3 upload could not connect. Check your network and the bucket CORS configuration.'))
+    xhr.onerror=()=>reject(new Error(`S3 upload could not connect from ${window.location.origin}. Check network access and ensure this exact origin is allowed by the reports bucket CORS rule.`))
     xhr.ontimeout=()=>reject(new Error('S3 upload timed out. Retry this file.'))
     xhr.onload=()=>{
       if(xhr.status>=200&&xhr.status<300) resolve()

@@ -1,178 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1480" viewBox="0 0 2200 1480" role="img" aria-labelledby="title desc">
-  <title id="title">RadiologyOS AWS application and deployment architecture</title>
-  <desc id="desc">Portfolio architecture diagram showing the GitHub Actions to Amazon ECR and Systems Manager deployment path, a single EC2 test host, Cognito authentication, private PostgreSQL, S3 document storage, Bedrock Knowledge Bases with Titan embeddings and S3 Vectors, Bedrock Runtime generation, DynamoDB metadata, Secrets Manager, and KMS encryption.</desc>
-  <defs>
-    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill="#536b82"/></marker>
-    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill="#2875c7"/></marker>
-    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill="#16845b"/></marker>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#19344f" flood-opacity=".10"/></filter>
-    <style>
-      .bg{fill:#f5f8fc}.title{font:700 36px Arial,sans-serif;fill:#172f46}.subtitle{font:16px Arial,sans-serif;fill:#526b82}.section{font:700 19px Arial,sans-serif;fill:#183651;letter-spacing:.7px}.card{fill:#fff;stroke:#d7e2ec;stroke-width:2;rx:15;filter:url(#shadow)}.aws{fill:#fff;stroke:#d7e2ec;stroke-width:2;rx:14;filter:url(#shadow)}.name{font:700 17px Arial,sans-serif;fill:#17324b}.small{font:14px Arial,sans-serif;fill:#526b82}.tiny{font:12px Arial,sans-serif;fill:#647c91}.service{fill:#f3a847}.svcStroke{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.svcFill{fill:#fff}.flow{fill:none;stroke:#536b82;stroke-width:3;marker-end:url(#arrow)}.deploy{fill:none;stroke:#2875c7;stroke-width:3;marker-end:url(#arrowBlue)}.data{fill:none;stroke:#16845b;stroke-width:3;marker-end:url(#arrowGreen)}.dashed{fill:none;stroke:#a87811;stroke-width:2.5;stroke-dasharray:8 7}.boundary{fill:#edf4fa;fill-opacity:.62;stroke:#85a4bf;stroke-width:2.5;stroke-dasharray:10 7;rx:22}.boundaryLabel{font:700 17px Arial,sans-serif;fill:#375c79}.pill{fill:#fff4df;stroke:#f1c57e;stroke-width:1.5;rx:9}.pillText{font:700 12px Arial,sans-serif;fill:#78520b}.lineLabel{font:12px Arial,sans-serif;fill:#435b70;paint-order:stroke;stroke:#f5f8fc;stroke-width:5;stroke-linejoin:round}.white{fill:#fff}
-    </style>
-  </defs>
-  <rect class="bg" width="2200" height="1480"/>
-  <text class="title" x="64" y="62">RadiologyOS · AWS application and delivery architecture</text>
-  <text class="subtitle" x="66" y="92">Current Terraform-managed development/test design · single EC2 host · synthetic data only</text>
-
-  <!-- CI/CD lane -->
-  <rect class="card" x="48" y="120" width="2104" height="270"/>
-  <text class="section" x="76" y="158">SOURCE, BUILD &amp; CONTINUOUS DELIVERY</text>
-
-  <!-- Developer -->
-  <rect class="card" x="82" y="198" width="210" height="142"/>
-  <rect x="151" y="220" width="72" height="48" rx="5" fill="#e8f0f7" stroke="#536b82" stroke-width="3"/><path d="M143 277h88l-8 9h-72z" fill="#536b82"/><circle cx="187" cy="244" r="9" fill="#38a69a"/>
-  <text class="name" x="187" y="313" text-anchor="middle">Developer PC</text>
-  <text class="small" x="187" y="332" text-anchor="middle">code + Git push</text>
-
-  <!-- GitHub -->
-  <rect class="card" x="354" y="198" width="230" height="142"/>
-  <circle cx="469" cy="250" r="31" fill="#24292f"/><path d="M454 250c0-9 7-16 16-16s16 7 16 16c0 7-4 12-10 14v10h-11v-10c-7-2-11-7-11-14zm8-5 4 3 3-4 4 4 4-3" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <text class="name" x="469" y="313" text-anchor="middle">GitHub repository</text>
-  <text class="small" x="469" y="332" text-anchor="middle">main branch</text>
-
-  <!-- Actions -->
-  <rect class="card" x="650" y="198" width="250" height="142"/>
-  <rect x="741" y="218" width="68" height="58" rx="12" fill="#26364a"/><path d="M774 228l-15 21h12l-4 16 16-23h-12z" fill="#fff"/>
-  <text class="name" x="775" y="313" text-anchor="middle">GitHub Actions</text>
-  <text class="small" x="775" y="332" text-anchor="middle">Python tests + Vite build</text>
-
-  <!-- OIDC -->
-  <rect class="aws" x="970" y="198" width="242" height="142"/>
-  <rect class="service" x="1057" y="216" width="68" height="58" rx="12"/><path class="svcStroke" d="M1091 227l18 7v12c0 12-8 19-18 24-10-5-18-12-18-24v-12z M1082 244l7 7 12-14"/>
-  <text class="name" x="1091" y="313" text-anchor="middle">IAM + GitHub OIDC</text>
-  <text class="small" x="1091" y="332" text-anchor="middle">short-lived scoped role</text>
-
-  <!-- ECR -->
-  <rect class="aws" x="1280" y="198" width="226" height="142"/>
-  <rect class="service" x="1359" y="216" width="68" height="58" rx="12"/><path class="svcStroke" d="M1375 231h36v29h-36z M1375 239h36 M1383 231v8 M1393 231v8 M1403 231v8 M1381 247h7m6 0h7m6 0h-3"/>
-  <text class="name" x="1393" y="313" text-anchor="middle">Amazon ECR</text>
-  <text class="small" x="1393" y="332" text-anchor="middle">immutable ARM64 image</text>
-
-  <!-- SSM -->
-  <rect class="aws" x="1570" y="198" width="226" height="142"/>
-  <rect class="service" x="1649" y="216" width="68" height="58" rx="12"/><rect class="svcStroke" x="1662" y="228" width="42" height="32" rx="3"/><path class="svcStroke" d="m1671 238 7 6-7 6m13 0h10"/>
-  <text class="name" x="1683" y="313" text-anchor="middle">AWS Systems Manager</text>
-  <text class="small" x="1683" y="332" text-anchor="middle">Run Command · deploy</text>
-
-  <!-- EC2 delivery endpoint -->
-  <rect class="aws" x="1860" y="198" width="242" height="142"/>
-  <rect class="service" x="1947" y="216" width="68" height="58" rx="12"/><rect class="svcStroke" x="1963" y="226" width="36" height="38" rx="3"/><path class="svcStroke" d="M1970 234h22m-22 8h22m-22 8h22m-22 8h14"/>
-  <text class="name" x="1981" y="313" text-anchor="middle">EC2 test host</text>
-  <text class="small" x="1981" y="332" text-anchor="middle">Docker · restart · health-check</text>
-
-  <path class="deploy" d="M292 269H344"/><path class="deploy" d="M584 269H640"/><path class="deploy" d="M900 269H960"/><path class="deploy" d="M1212 269H1270"/><path class="deploy" d="M1506 269H1560"/><path class="deploy" d="M1796 269H1850"/>
-  <text class="lineLabel" x="318" y="253" text-anchor="middle">push</text><text class="lineLabel" x="929" y="253" text-anchor="middle">OIDC</text><text class="lineLabel" x="1240" y="253" text-anchor="middle">publish</text><text class="lineLabel" x="1537" y="253" text-anchor="middle">SSM</text>
-  <rect class="pill" x="77" y="356" width="270" height="24"/><text class="pillText" x="212" y="373" text-anchor="middle">Pull requests: verify only</text>
-  <rect class="pill" x="360" y="356" width="460" height="24"/><text class="pillText" x="590" y="373" text-anchor="middle">Push to main: verify → build → deploy</text>
-  <text class="tiny" x="2090" y="373" text-anchor="end">Deployment path is separate from application request traffic</text>
-
-  <!-- VPC -->
-  <rect class="boundary" x="48" y="430" width="2104" height="870"/>
-  <text class="boundaryLabel" x="76" y="464">AWS REGION · us-east-1 · AWS account</text>
-  <rect class="boundary" x="330" y="480" width="675" height="455"/>
-  <text class="boundaryLabel" x="350" y="507">VPC · default VPC · application host + private database</text>
-
-  <!-- User browser -->
-  <rect class="card" x="82" y="515" width="220" height="155"/>
-  <circle cx="192" cy="565" r="31" fill="#e8f5f5" stroke="#258f8a" stroke-width="3"/><path d="M171 553h42v28h-42z M171 560h42" fill="none" stroke="#258f8a" stroke-width="3"/><circle cx="177" cy="556" r="1.8" fill="#258f8a"/><circle cx="183" cy="556" r="1.8" fill="#258f8a"/>
-  <text class="name" x="192" y="626" text-anchor="middle">Hospital user</text><text class="small" x="192" y="648" text-anchor="middle">browser · synthetic records</text>
-
-  <!-- perimeter controls -->
-  <rect class="aws" x="355" y="515" width="250" height="155"/>
-  <rect class="service" x="446" y="531" width="68" height="58" rx="12"/><path class="svcStroke" d="M457 559h46m-37-15-9 15 9 15m28-30 9 15-9 15"/><circle cx="480" cy="559" r="5" fill="#fff"/>
-  <text class="name" x="480" y="626" text-anchor="middle">Elastic IP + security group</text><text class="small" x="480" y="648" text-anchor="middle">HTTP :8000 from one /32</text>
-
-  <!-- App EC2 -->
-  <rect class="aws" x="670" y="515" width="310" height="155"/>
-  <rect class="service" x="791" y="531" width="68" height="58" rx="12"/><rect class="svcStroke" x="806" y="541" width="38" height="36" rx="3"/><path class="svcStroke" d="M813 549h24m-24 8h24m-24 8h24m-24 8h15"/>
-  <text class="name" x="825" y="626" text-anchor="middle">Amazon EC2 · t4g.micro</text><text class="small" x="825" y="648" text-anchor="middle">Amazon Linux · Docker · React + Python API</text>
-  <rect class="pill" x="726" y="682" width="198" height="24"/><text class="pillText" x="825" y="699" text-anchor="middle">single-node test app · HTTP</text>
-
-  <!-- RDS inside VPC -->
-  <rect class="aws" x="670" y="750" width="310" height="165"/>
-  <rect class="service" x="791" y="766" width="68" height="58" rx="12"/><ellipse class="svcStroke" cx="825" cy="778" rx="18" ry="7"/><path class="svcStroke" d="M807 778v27c0 9 36 9 36 0v-27m-36 10c0 9 36 9 36 0m-36 9c0 9 36 9 36 0"/>
-  <text class="name" x="825" y="858" text-anchor="middle">Amazon RDS · PostgreSQL 16</text><text class="small" x="825" y="881" text-anchor="middle">private · tenant data · row-level security</text><text class="tiny" x="825" y="900" text-anchor="middle">security-group ingress from app on TCP 5432</text>
-
-  <!-- AWS service area -->
-  <text class="section" x="1070" y="510">APPLICATION SERVICES &amp; DATA</text>
-  <!-- Cognito -->
-  <rect class="aws" x="1060" y="540" width="230" height="145"/>
-  <rect class="service" x="1141" y="554" width="68" height="56" rx="12"/><circle class="svcStroke" cx="1175" cy="572" r="8"/><path class="svcStroke" d="M1159 595c1-11 8-16 16-16s15 5 16 16m-32-25h-6m44 0h-6"/>
-  <text class="name" x="1175" y="644" text-anchor="middle">Amazon Cognito</text><text class="small" x="1175" y="665" text-anchor="middle">user pool · email identity</text>
-  <!-- S3 -->
-  <rect class="aws" x="1330" y="540" width="230" height="145"/>
-  <rect class="service" x="1411" y="554" width="68" height="56" rx="12"/><path class="svcStroke" d="M1428 566h34l8 31h-50z M1425 575h41m-33-9 4 31m20-31-4 31"/>
-  <text class="name" x="1445" y="644" text-anchor="middle">Amazon S3</text><text class="small" x="1445" y="665" text-anchor="middle">originals · normalized · final</text>
-  <!-- Dynamo -->
-  <rect class="aws" x="1600" y="540" width="230" height="145"/>
-  <rect class="service" x="1681" y="554" width="68" height="56" rx="12"/><ellipse class="svcStroke" cx="1715" cy="565" rx="19" ry="7"/><path class="svcStroke" d="M1696 565v28c0 9 38 9 38 0v-28m-38 9c0 9 38 9 38 0m-38 9c0 9 38 9 38 0"/>
-  <text class="name" x="1715" y="644" text-anchor="middle">Amazon DynamoDB</text><text class="small" x="1715" y="665" text-anchor="middle">import / job metadata</text>
-  <!-- Secrets -->
-  <rect class="aws" x="1870" y="540" width="230" height="145"/>
-  <rect class="service" x="1951" y="554" width="68" height="56" rx="12"/><rect class="svcStroke" x="1966" y="565" width="38" height="30" rx="4"/><path class="svcStroke" d="M1973 574h24m-24 8h17m-17 8h20"/>
-  <text class="name" x="1985" y="644" text-anchor="middle">Secrets Manager</text><text class="small" x="1985" y="665" text-anchor="middle">app config + runtime DB secret</text>
-
-  <!-- RAG row -->
-  <text class="section" x="1070" y="765">HISTORICAL REPORT RAG &amp; DRAFT GENERATION</text>
-  <!-- KB -->
-  <rect class="aws" x="1060" y="795" width="250" height="165"/>
-  <rect class="service" x="1151" y="810" width="68" height="58" rx="12"/><path class="svcStroke" d="M1164 824h14l7 6v25h-21z M1182 824v7h7m-22 2h12m-12 6h12m-12 6h8m6 7h12v-25l-7-6h-5"/>
-  <text class="name" x="1185" y="900" text-anchor="middle">Bedrock Knowledge Base</text><text class="small" x="1185" y="922" text-anchor="middle">required tenant + modality filters</text><text class="tiny" x="1185" y="943" text-anchor="middle">S3 data sources · chunk + retrieve</text>
-  <!-- Embeddings -->
-  <rect class="aws" x="1370" y="795" width="220" height="165"/>
-  <rect class="service" x="1446" y="810" width="68" height="58" rx="12"/><path class="svcStroke" d="M1460 847c-8-8-4-24 6-27 5-2 9 1 11 6 4-7 11-7 15-2 5 6 3 18-4 23-8 6-20 6-28 0zm4-8 7-10 6 9 7-11"/>
-  <text class="name" x="1480" y="900" text-anchor="middle">Titan Text Embeddings</text><text class="small" x="1480" y="922" text-anchor="middle">vector representation model</text>
-  <!-- Vectors -->
-  <rect class="aws" x="1650" y="795" width="220" height="165"/>
-  <rect class="service" x="1726" y="810" width="68" height="58" rx="12"/><circle class="svcFill" cx="1744" cy="831" r="5"/><circle class="svcFill" cx="1777" cy="827" r="5"/><circle class="svcFill" cx="1759" cy="852" r="5"/><circle class="svcFill" cx="1781" cy="850" r="4"/><path class="svcStroke" d="m1749 831 23-4m-19 8 5 13m7-1 13 3m-10-20 3 16"/>
-  <text class="name" x="1760" y="900" text-anchor="middle">Amazon S3 Vectors</text><text class="small" x="1760" y="922" text-anchor="middle">encrypted vector index</text>
-  <!-- Bedrock Runtime -->
-  <rect class="aws" x="1930" y="795" width="220" height="165"/>
-  <rect class="service" x="2006" y="810" width="68" height="58" rx="12"/><path class="svcStroke" d="M2040 819v38m-19-19h38m-31-13 26 26m0-26-26 26"/><circle cx="2040" cy="838" r="8" fill="#f3a847" stroke="#fff" stroke-width="3"/>
-  <text class="name" x="2040" y="900" text-anchor="middle">Bedrock Runtime</text><text class="small" x="2040" y="922" text-anchor="middle">configurable text model</text><text class="tiny" x="2040" y="943" text-anchor="middle">draft output · clinician reviews</text>
-
-  <!-- request arrows from app to core services -->
-  <path class="flow" d="M980 572 C1015 572 1020 600 1050 600"/><text class="lineLabel" x="1018" y="562" text-anchor="middle">identity</text>
-  <path class="flow" d="M302 590H345"/><text class="lineLabel" x="324" y="576" text-anchor="middle">HTTP</text>
-  <path class="flow" d="M605 590H660"/><text class="lineLabel" x="632" y="576" text-anchor="middle">allowed /32</text>
-  <path class="flow" d="M825 708V738"/><text class="lineLabel" x="842" y="731">SQL · TCP 5432</text>
-  <path class="data" d="M980 620 C1120 730 1220 655 1320 615"/><text class="lineLabel" x="1160" y="704" text-anchor="middle">uploads / report files</text>
-  <path class="flow" d="M980 600 C1220 470 1575 475 1600 565"/><text class="lineLabel" x="1480" y="490" text-anchor="middle">job metadata</text>
-  <path class="flow" d="M980 590 C1310 465 1810 450 1870 570"/><text class="lineLabel" x="1775" y="477" text-anchor="middle">read scoped secrets</text>
-  <path class="data" d="M980 650 C1020 720 1055 830 1055 858"/><text class="lineLabel" x="1017" y="790" text-anchor="middle">filtered retrieval</text>
-  <path class="data" d="M980 660 C1250 1015 1800 1025 1925 875"/><text class="lineLabel" x="1560" y="1017" text-anchor="middle">prompt + retrieved examples</text>
-
-  <!-- ingestion / embedding / index flow -->
-  <path class="data" d="M1445 687 C1425 730 1280 740 1210 790"/><text class="lineLabel" x="1325" y="751" text-anchor="middle">S3 prefixes: old + final reports</text>
-  <path class="data" d="M1310 875H1360"/><text class="lineLabel" x="1335" y="860" text-anchor="middle">embed</text>
-  <path class="data" d="M1590 875H1640"/><text class="lineLabel" x="1615" y="860" text-anchor="middle">vectors</text>
-  <path class="flow" d="M1650 909 C1570 988 1380 988 1305 925"/><text class="lineLabel" x="1480" y="984" text-anchor="middle">similarity search results</text>
-  <path class="dashed" d="M1070 1130H2125"/>
-
-  <!-- Encryption band -->
-  <rect class="aws" x="90" y="1035" width="870" height="190"/>
-  <rect class="service" x="125" y="1071" width="76" height="64" rx="13"/><path class="svcStroke" d="M163 1080l21 8v13c0 15-9 25-21 31-12-6-21-16-21-31v-13z M154 1102l7 8 15-17"/>
-  <text class="name" x="225" y="1088">AWS KMS</text><text class="small" x="225" y="1112">Customer-managed key encrypts supported storage and secrets.</text>
-  <text class="small" x="128" y="1160">At-rest encryption: RDS · S3 · DynamoDB · S3 Vectors · Secrets Manager</text>
-  <text class="tiny" x="128" y="1192">Dashed gold connector indicates encryption/key dependency, not report-data traffic.</text>
-
-  <!-- runtime role -->
-  <rect class="aws" x="1020" y="1035" width="520" height="190"/>
-  <rect class="service" x="1050" y="1071" width="76" height="64" rx="13"/><path class="svcStroke" d="M1067 1082h43v32h-43z M1076 1091h25m-25 8h25m-25 8h17"/>
-  <text class="name" x="1148" y="1088">IAM instance profile</text><text class="small" x="1148" y="1112">EC2 app role: scoped AWS access</text>
-  <text class="tiny" x="1050" y="1160">S3 · RDS secret · Cognito · Bedrock · DynamoDB · ECR pull</text>
-  <text class="tiny" x="1050" y="1192">No long-lived AWS keys stored in the container.</text>
-
-  <!-- Operational boundary / legend -->
-  <rect class="aws" x="1595" y="1035" width="520" height="190"/>
-  <text class="name" x="1625" y="1075">Legend &amp; deployment boundary</text>
-  <path class="deploy" d="M1628 1110h90"/><text class="small" x="1735" y="1115">CI/CD control path</text>
-  <path class="data" d="M1628 1145h90"/><text class="small" x="1735" y="1150">application / data flow</text>
-  <path class="dashed" d="M1628 1180h90"/><text class="small" x="1735" y="1185">encryption dependency</text>
-  <text class="tiny" x="1625" y="1210">No ALB · no NAT Gateway · no HTTPS endpoint · no HA tier</text>
-
-  <!-- bottom notes -->
-  <text class="tiny" x="66" y="1340">Development/test only · port 8000 is restricted to one configured IPv4 /32 · do not use real patient information</text>
-  <text class="tiny" x="66" y="1367">Not shown: transient ingestion status polling and application internals. This drawing is a logical view, not a subnet-level network map.</text>
-  <text class="tiny" x="2135" y="1430" text-anchor="end">RadiologyOS · architecture overview · 2026</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1050" viewBox="0 0 1600 1050" role="img" aria-labelledby="title desc">
+<title id="title">RadiologyOS AWS architecture</title><desc id="desc">GitHub Actions deploys immutable ARM64 Docker images through ECR to an EC2 Auto Scaling Group behind an Application Load Balancer in a dedicated VPC. The private application tier uses Cognito, private PostgreSQL, S3, DynamoDB, Bedrock Knowledge Bases, S3 Vectors, Bedrock Runtime and Secrets Manager. KMS encrypts data.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#62748a"/></marker><marker id="blue" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#2878c8"/></marker><marker id="green" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#24835b"/></marker><filter id="shadow" x="-15%" y="-15%" width="130%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#132c45" flood-opacity=".12"/></filter></defs>
+<rect width="1600" height="1050" fill="#f3f7fb"/><text x="48" y="52" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#122b45">RadiologyOS · AWS deployment architecture</text><text x="50" y="82" font-family="Arial,sans-serif" font-size="15" fill="#526a80">Tenant-isolated reporting · filtered RAG · container CI/CD · development target</text>
+<!-- CI/CD -->
+<rect x="40" y="112" width="1520" height="150" rx="18" fill="#eaf2fb" stroke="#a9c4df" stroke-width="2"/><text x="62" y="142" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#285783">DELIVERY PIPELINE · GitHub Actions → AWS OIDC → ECR → ASG refresh</text>
+<g filter="url(#shadow)" font-family="Arial,sans-serif" text-anchor="middle"><rect x="75" y="164" width="190" height="72" rx="12" fill="#fff" stroke="#c7d5e3"/><text x="170" y="192" font-size="16" font-weight="700" fill="#253b51">Developer</text><text x="170" y="215" font-size="13" fill="#536a80">commit → main</text><rect x="330" y="164" width="230" height="72" rx="12" fill="#242f3e" stroke="#242f3e"/><text x="445" y="192" font-size="16" font-weight="700" fill="#fff">GitHub Actions</text><text x="445" y="215" font-size="13" fill="#dce6ef">tests · Vite build · Buildx ARM64</text><rect x="625" y="164" width="185" height="72" rx="12" fill="#fff" stroke="#c7d5e3"/><text x="717" y="192" font-size="16" font-weight="700" fill="#253b51">GitHub OIDC</text><text x="717" y="215" font-size="13" fill="#536a80">scoped short-lived role</text><rect x="880" y="164" width="190" height="72" rx="12" fill="#fff4e6" stroke="#e8b569"/><text x="975" y="192" font-size="16" font-weight="700" fill="#7a4c0d">Amazon ECR</text><text x="975" y="215" font-size="13" fill="#785b31">immutable unique image tag</text><rect x="1140" y="164" width="365" height="72" rx="12" fill="#fff" stroke="#c7d5e3"/><text x="1322" y="192" font-size="16" font-weight="700" fill="#253b51">SSM + Auto Scaling</text><text x="1322" y="215" font-size="13" fill="#536a80">image parameter · rolling refresh · ALB health</text></g>
+<g fill="none" stroke="#2878c8" stroke-width="3" marker-end="url(#blue)"><path d="M265 200H322"/><path d="M560 200H617"/><path d="M810 200H872"/><path d="M1070 200H1132"/></g>
+<!-- VPC -->
+<rect x="40" y="300" width="1000" height="680" rx="24" fill="#f2faf6" stroke="#29936b" stroke-width="3"/><text x="66" y="337" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#176a4c">DEDICATED VPC · 2 AZs · public edge / private app / isolated data</text>
+<rect x="62" y="363" width="956" height="140" rx="16" fill="#fff8ed" stroke="#e7bd78" stroke-width="2"/><text x="82" y="391" font-family="Arial,sans-serif" font-size="15" font-weight="700" fill="#815a1b">PUBLIC SUBNETS</text>
+<rect x="62" y="523" width="600" height="264" rx="16" fill="#eef5ff" stroke="#86a9d8" stroke-width="2"/><text x="82" y="551" font-family="Arial,sans-serif" font-size="15" font-weight="700" fill="#2e5f9c">PRIVATE APPLICATION SUBNETS · ASG 1–4</text>
+<rect x="682" y="523" width="336" height="264" rx="16" fill="#f3f0ff" stroke="#a394d4" stroke-width="2"/><text x="704" y="551" font-family="Arial,sans-serif" font-size="15" font-weight="700" fill="#5d4c96">PRIVATE DATA SUBNETS</text>
+<g filter="url(#shadow)" font-family="Arial,sans-serif" text-anchor="middle"><rect x="85" y="410" width="245" height="72" rx="12" fill="#fff" stroke="#d8bb8c"/><text x="207" y="438" font-size="16" font-weight="700" fill="#263c52">Application Load Balancer</text><text x="207" y="461" font-size="13" fill="#596f84">HTTP test ingress · source /32</text><rect x="375" y="410" width="255" height="72" rx="12" fill="#fff" stroke="#d8bb8c"/><text x="502" y="438" font-size="16" font-weight="700" fill="#263c52">NAT Gateway + Elastic IP</text><text x="502" y="461" font-size="13" fill="#596f84">private-tier outbound access</text><rect x="675" y="410" width="300" height="72" rx="12" fill="#fff" stroke="#d8bb8c"/><text x="825" y="438" font-size="16" font-weight="700" fill="#263c52">SSM deployment host</text><text x="825" y="461" font-size="13" fill="#596f84">bootstrap · Docker · instance profile</text><rect x="100" y="590" width="260" height="125" rx="14" fill="#fff" stroke="#8aabd5"/><text x="230" y="624" font-size="17" font-weight="700" fill="#264970">EC2 Auto Scaling Group</text><text x="230" y="651" font-size="14" fill="#536a80">Dockerized React + Python API</text><text x="230" y="676" font-size="13" fill="#536a80">CPU target tracking · max 4</text><rect x="390" y="590" width="235" height="125" rx="14" fill="#fff" stroke="#8aabd5"/><text x="507" y="624" font-size="17" font-weight="700" fill="#264970">App security boundary</text><text x="507" y="651" font-size="14" fill="#536a80">ALB → app :8000 only</text><text x="507" y="676" font-size="13" fill="#536a80">instance profile · no static keys</text><rect x="710" y="590" width="280" height="125" rx="14" fill="#fff" stroke="#a394d4"/><text x="850" y="624" font-size="17" font-weight="700" fill="#514283">Amazon RDS PostgreSQL 16</text><text x="850" y="651" font-size="14" fill="#536a80">private · fresh schema via migrations</text><text x="850" y="676" font-size="13" fill="#536a80">tenant state · RLS · runtime role</text><rect x="120" y="818" width="830" height="92" rx="14" fill="#fff" stroke="#d3dfeb"/><text x="535" y="853" font-size="16" font-weight="700" fill="#2b4157">Network controls</text><text x="535" y="878" font-size="14" fill="#5b7185">ALB SG allows configured test /32 · app SG trusts ALB · RDS SG trusts app only</text></g>
+<g fill="none" stroke="#62748a" stroke-width="3" marker-end="url(#arrow)"><path d="M207 482V582"/><path d="M360 651H382"/><path d="M625 651H700"/><path d="M502 482V582"/><path d="M825 482V582"/></g>
+<!-- managed services -->
+<rect x="1080" y="300" width="480" height="680" rx="24" fill="#fff" stroke="#8ba0b5" stroke-width="2"/><text x="1105" y="337" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#263d53">MANAGED AWS SERVICES</text>
+<g filter="url(#shadow)" font-family="Arial,sans-serif" text-anchor="middle"><rect x="1110" y="375" width="195" height="90" rx="12" fill="#fff" stroke="#d3dfeb"/><text x="1207" y="408" font-size="16" font-weight="700" fill="#253b51">Amazon Cognito</text><text x="1207" y="432" font-size="13" fill="#536a80">identity · email invites</text><rect x="1330" y="375" width="195" height="90" rx="12" fill="#fff" stroke="#d3dfeb"/><text x="1427" y="408" font-size="16" font-weight="700" fill="#253b51">AWS Secrets Manager</text><text x="1427" y="432" font-size="13" fill="#536a80">app + runtime DB secrets</text><rect x="1110" y="495" width="195" height="98" rx="12" fill="#edf7ef" stroke="#9bc6a0"/><text x="1207" y="530" font-size="16" font-weight="700" fill="#285a32">Amazon S3</text><text x="1207" y="554" font-size="13" fill="#536a80">historical · normalized · final</text><rect x="1330" y="495" width="195" height="98" rx="12" fill="#edf3ff" stroke="#9db6df"/><text x="1427" y="530" font-size="16" font-weight="700" fill="#304f82">Amazon DynamoDB</text><text x="1427" y="554" font-size="13" fill="#536a80">ingestion/job metadata</text><rect x="1110" y="625" width="415" height="128" rx="14" fill="#eef8f5" stroke="#83b9a7"/><text x="1317" y="660" font-size="17" font-weight="700" fill="#176a4c">Amazon Bedrock Knowledge Base</text><text x="1317" y="686" font-size="14" fill="#536a80">S3 ingestion · tenant + modality filtered retrieval</text><text x="1317" y="710" font-size="13" fill="#536a80">Titan Text Embeddings V2 · S3 Vectors index</text><rect x="1110" y="785" width="195" height="92" rx="12" fill="#eef8f5" stroke="#83b9a7"/><text x="1207" y="819" font-size="16" font-weight="700" fill="#176a4c">Bedrock Runtime</text><text x="1207" y="843" font-size="13" fill="#536a80">Nova Pro · draft generation</text><rect x="1330" y="785" width="195" height="92" rx="12" fill="#fff3f3" stroke="#dfa1a1"/><text x="1427" y="819" font-size="16" font-weight="700" fill="#8e3131">AWS KMS</text><text x="1427" y="843" font-size="13" fill="#536a80">at-rest encryption</text></g>
+<g fill="none" stroke="#24835b" stroke-width="3" marker-end="url(#green)"><path d="M955 651H1098"/><path d="M1305 545H1318V616"/><path d="M1305 689H1318"/><path d="M1207 753V777"/></g>
+<text x="48" y="1020" font-family="Arial,sans-serif" font-size="13" fill="#60758a">Development configuration · synthetic data only · HTTP test listener · one NAT Gateway · ALB has AWS-managed DNS, not a static EIP</text>
 </svg>

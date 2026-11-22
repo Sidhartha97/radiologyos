@@ -1,86 +1,56 @@
-# GitHub Actions to EC2 with Amazon ECR
+# GitHub Actions → ECR → EC2 Auto Scaling deployment
 
-GitHub Actions verifies the project, builds an immutable ARM64 image, pushes it
-to the Terraform-managed private ECR repository, then tells EC2 to pull and run
-that image through Systems Manager Run Command. AWS access uses GitHub OIDC;
-there are no Docker Hub credentials or static AWS keys in GitHub.
+The workflow in `.github/workflows/deploy.yml` verifies changes and delivers ARM64 Docker images to the EC2 Auto Scaling Group behind the ALB.
 
-## One-time AWS setup
+## Workflow behavior
 
-The Terraform configuration must set:
+- Pull requests run backend tests and a frontend production build; they do not deploy.
+- Pushes to `main` and manual `workflow_dispatch` runs on `main` can deploy.
+- GitHub Actions assumes a narrowly scoped AWS role using OIDC. Do not create GitHub secrets containing long-lived AWS keys.
+- Buildx pushes an immutable image tagged with commit SHA, workflow run ID and attempt number. A unique attempt suffix lets reruns coexist with ECR tag immutability.
+- The ASG deployment branch writes the image URI to SSM Parameter Store, starts an instance refresh, waits for completion and checks ALB target health.
+- The legacy single-instance branch uses SSM Run Command when `AUTOSCALING_GROUP_NAME` is empty. Use ASG variables for the current ALB/ASG deployment.
 
-```hcl
-github_actions_repository = "Sidhartha97/radiologyos"
-```
+## Required GitHub repository variables
 
-The testing host is enabled by `testing-host.auto.tfvars`. Apply the reviewed
-Terraform changes from PowerShell:
+Add these under **Repository Settings → Secrets and variables → Actions → Variables**. Use Terraform outputs as the source of truth; `.env` does not populate GitHub variables.
 
-```powershell
-$env:AWS_PROFILE = "radiology-dev"
-Set-Location "C:\path\to\radiology-reporting\terraform"
-terraform plan -var-file="historical-reports.tfvars" -out="ecr-cicd.tfplan"
-terraform show "ecr-cicd.tfplan"
-# Confirm the plan updates the GitHub Actions role and removes only the obsolete
-# Docker Hub pull secret, then apply that reviewed plan.
-terraform apply "ecr-cicd.tfplan"
-```
-
-This enables the GitHub OIDC role to push only to this app's ECR repository and
-send SSM deployment commands to this EC2 instance. EC2 already has scoped ECR
-pull access. The obsolete Docker Hub pull secret is removed by Terraform.
-
-## Initial application bootstrap
-
-Run the explicit initial database/schema bootstrap and first ECR deployment
-from the project root. The RDS instance must be running:
-
-```powershell
-Set-Location "C:\path\to\radiology-reporting"
-py -3.12 scripts/deploy_aws.py deploy --profile radiology-dev --approve-schema --admin-email sidharthachintu1997@gmail.com
-```
-
-This command builds and pushes the first image to ECR, applies the approved
-database migrations, configures the application, and starts the EC2 service.
-It does not run Terraform.
-
-## GitHub Actions configuration
-
-In the GitHub repository, open **Settings → Secrets and variables → Actions →
-Variables** and add these repository variables:
-
-| Variable | Value |
-| --- | --- |
-| `AWS_REGION` | `us-east-1` |
+| Variable | Current purpose |
+|---|---|
+| `AWS_REGION` | Deployment region, currently `us-east-1` |
 | `AWS_ROLE_ARN` | `terraform output -raw github_actions_deploy_role_arn` |
-| `EC2_INSTANCE_ID` | `terraform output -raw testing_instance_id` (single-host mode) |
 | `ECR_REPOSITORY_URI` | `terraform output -raw application_repository_url` |
-| `AUTOSCALING_GROUP_NAME` | Optional: `terraform output -raw application_asg_name`; leave blank for the existing single-host deployment |
-| `APP_IMAGE_PARAMETER` | Optional: `terraform output -raw application_image_parameter_name` |
-| `APP_TARGET_GROUP_ARN` | Optional: `terraform output -raw application_target_group_arn` |
+| `AUTOSCALING_GROUP_NAME` | `terraform output -raw application_asg_name`; must be non-empty to select ASG rollout |
+| `APP_IMAGE_PARAMETER` | `terraform output -raw application_image_parameter_name` |
+| `APP_TARGET_GROUP_ARN` | `terraform output -raw application_target_group_arn` |
 
-No Docker Hub secrets or AWS access keys are required. The workflow uses
-GitHub's OIDC identity to assume the role limited to this repository's `main`
-branch.
+`EC2_INSTANCE_ID` is only needed for legacy single-instance mode. Do not leave the ASG group variable blank when intending to deploy behind the ALB.
 
-## Deploy changes
+## First-time database bootstrap
 
-Commit and push to `main`, or run **Actions → CI and EC2 deployment → Run
-workflow** on `main`. Pull requests run verification only. A successful main
-branch run builds and pushes an ARM64 image tagged with the commit SHA, workflow
-run ID, and attempt number. The unique attempt suffix permits safe retries with
-ECR immutable tags. With
-`AUTOSCALING_GROUP_NAME` unset it deploys through SSM to the single EC2 host.
-When the optional ALB/ASG Terraform mode is enabled and all three ASG variables
-are set, the workflow updates the image parameter, starts a rolling ASG instance
-refresh and waits for an ALB healthy target. The ASG launch template fetches the
-image parameter and scoped app secrets at instance boot.
-
-Open the app at the current testing IP from the single allowed client IP:
+After Terraform provisions a fresh RDS database, run the reviewed bootstrap from the project root. It applies the versioned schema, creates/rotates the non-owner runtime login when explicitly requested, updates runtime configuration and starts the deployment host service:
 
 ```powershell
-terraform -chdir=terraform output -raw testing_instance_public_ip
+py -3.12 scripts/deploy_aws.py deploy --profile radiology-dev --approve-schema --admin-email admin@example.com
 ```
 
-Use `http://<that-address>:8000/` only with synthetic data and test accounts.
-For real clinical data, configure HTTPS and complete a security review first.
+Use a verified Cognito administrator address for `--admin-email`. This step is needed after a fresh database so the administrator identity is bound in the new schema. Keep the email and database outputs private if appropriate for the account.
+
+## Deploy a code change
+
+```powershell
+git add <changed-files>
+git commit -m "Describe the change"
+git push origin main
+```
+
+Open **GitHub → Actions → CI and EC2 deployment**. Verify the verification job, ARM64 build/ECR push, ASG refresh and ALB health check. The application URL is the current `application_alb_dns_name` Terraform output; the development listener is HTTP and should only be used with synthetic data.
+
+## IAM and troubleshooting
+
+- OIDC assumption failures: verify `AWS_ROLE_ARN`, repository identity, allowed `main` ref and `id-token: write` permission.
+- ECR push denied: inspect the Terraform-managed GitHub deploy role policy and apply its reviewed IAM update.
+- Instance refresh permission denied: the deploy role needs refresh start, scoped to the ASG, plus describe operations (some describe APIs require `Resource: "*"`).
+- Target health permission denied: `elasticloadbalancing:DescribeTargetHealth` requires `Resource: "*"` under AWS service authorization.
+- No ASG deployment step: check `AUTOSCALING_GROUP_NAME`, `APP_IMAGE_PARAMETER`, and `APP_TARGET_GROUP_ARN` variables.
+- Unhealthy targets: inspect the target group health reason, EC2 service status through SSM, application configuration secret and RDS connectivity. Do not paste secret values or clinical text into issue reports.
