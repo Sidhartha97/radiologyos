@@ -2,7 +2,7 @@
 
 **Multi-tenant radiology reporting with tenant-filtered RAG, clinician-reviewed AI drafts, and AWS-native CI/CD.**
 
-RadiologyOS combines a structured reporting workspace, hospital/user administration, report assignment and review workflows, a historical-report library, and an AI assistant grounded in permitted prior reports. The system is a development portfolio project; it is not clinically validated and must not be used with real patient data.
+RadiologyOS combines a structured reporting workspace, hospital/user administration, report assignment and review workflows, a historical-report library, and an AI assistant that retrieves relevant examples from historical reports users have uploaded. The system is a development portfolio project; it is not clinically validated and must not be used with real patient data.
 
 ## Architecture
 
@@ -24,10 +24,10 @@ Detailed materials:
 
 - Hospital/individual workspaces with server-resolved tenant identity and explicit membership/capability checks.
 - Radiology report editing, save/review/finalize, assignment, conversation history and edit locking.
-- Historical report ingestion from S3 with modality/study metadata and status visibility.
-- Tenant- and modality-filtered retrieval through Bedrock Knowledge Bases and S3 Vectors.
-- Bedrock report drafting grounded in retrieved examples; clinician review is required.
-- Platform administration, role management, token-usage visibility and manual payment records. Subscription billing is not enabled.
+- Upload historical reports to the tenant-scoped library; track validation, ingestion and per-document indexing status.
+- Retrieve relevant uploaded prior reports through Bedrock Knowledge Bases and S3 Vectors, filtered by tenant and modality, with optional study/body-region narrowing.
+- Generate report drafts using retrieved prior reports for style and terminology; clinician review is required.
+- Platform administration, role management, per-user Bedrock token-usage monitoring and manual payment records. Subscription billing is not enabled.
 
 ## Stack
 

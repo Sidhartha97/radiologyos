@@ -6,7 +6,8 @@ Rebuild the app to enable the new navigation page:
 docker compose up -d --build radiologyos
 ```
 
-Open Historical library, select the modality, choose files or a modality folder,
+Open Historical library, select the modality, choose the historical reports to upload
+or a modality folder,
 click Validate selected files, then Upload & index. Each batch accepts up to 100
 DOCX/text PDF/TXT files, each at most 10 MB. Folder selection uses the selected
 modality for all files. Source CSV/JSON splitter manifests are ignored. Invalid or

@@ -78,14 +78,15 @@ For the detailed browser/API sequence, ingestion and retrieval-generation diagra
 2. Amazon Cognito authenticates users. The backend verifies Cognito tokens and resolves workspace membership and roles server-side.
 3. The Python API uses a non-owner PostgreSQL runtime login. PostgreSQL row-level security and tenant-aware application checks protect tenant data.
 4. Report editing, assignment, review, finalization, locks, chat history and audit events use the authenticated tenant context. AI access and signing permission are separately granted capabilities.
-5. Secrets Manager supplies runtime DB credentials and application settings to EC2 through instance roles. AWS credentials are not embedded in the image.
+5. Bedrock Converse input/output/total token counters are recorded per workspace user and model. Platform administrators can view aggregate and per-user usage, including unresolved calls; prompts and report text are not part of these usage records, and this dashboard does not charge customers.
+6. Secrets Manager supplies runtime DB credentials and application settings to EC2 through instance roles. AWS credentials are not embedded in the image.
 
 ### Historical report RAG
 
-1. Users upload historical reports through the tenant-scoped library. Each source is stored in S3 and associated with tenant, modality and study metadata.
+1. Users upload their historical reports through the tenant-scoped library. Each uploaded source is stored in S3 and associated with tenant, modality and study metadata.
 2. Bedrock Knowledge Base S3 data sources ingest supported prefixes. Bedrock chunks documents and invokes Titan Text Embeddings V2; the encrypted S3 Vectors index stores embeddings and filterable metadata.
-3. A draft request is authenticated. The backend requires a modality, resolves prompt/dropdown conflicts, applies tenant and modality filters on retrieval, and checks returned metadata before using source text.
-4. Bedrock Runtime (currently configured for Nova Pro) receives the user instruction and permitted retrieved examples. The assistant returns a draft; a qualified clinician reviews and finalizes it.
+3. For a new draft, the backend searches those previously uploaded historical reports for matching examples. It requires a modality, resolves prompt/dropdown conflicts, applies tenant and modality filters, and checks returned metadata before using source text.
+4. Bedrock Runtime (currently configured for Nova Pro) receives the current user instruction and permitted retrieved examples from the uploaded historical library. The assistant returns a draft; a qualified clinician reviews and finalizes it.
 
 Retrieval examples provide style and terminology context; they do not establish clinical truth. Measurements, laterality, findings and impressions must be verified by a clinician.
 
@@ -111,6 +112,7 @@ Retrieval examples provide style and terminology context; they do not establish 
 | Amazon S3 | Historical originals, normalized references, final reports and deployment bundles | Block public access, TLS-only policy, KMS encryption |
 | Bedrock Knowledge Bases + S3 Vectors | Ingest, chunk, embed and retrieve historical report context | Tenant/modality metadata filters enforced by backend |
 | Amazon Bedrock Runtime | Generate report drafts using retrieved references | Model access through EC2 role; clinician review required |
+| PostgreSQL model-token events + platform dashboard | Monitor actual Bedrock input/output/total tokens per workspace user and unresolved calls | Platform-admin-only usage view; no prompt/report text or customer charging |
 | Amazon DynamoDB | Import/job state and related metadata | Application role with scoped table/index permissions |
 | AWS KMS + Secrets Manager | At-rest encryption and runtime configuration/credentials | Scoped role access; secrets are never baked into images |
 | GitHub Actions + OIDC IAM | Verify, build, publish and roll out application image | Short-lived identity restricted to the configured repository/ref |

@@ -18,8 +18,9 @@ React · TypeScript · Python · PostgreSQL · AWS · Bedrock · Terraform · Do
 ### Resume bullets
 
 - Designed a tenant-aware radiology reporting platform with role/capability separation for administrators, radiologists and transcriptionists, plus report assignment, review handoff and editing locks.
-- Built a retrieval-augmented drafting path using Amazon S3, Bedrock Knowledge Bases, Titan Text Embeddings V2 and S3 Vectors; enforced server-side tenant and modality filters and validated retrieved metadata before generation.
+- Built a retrieval-augmented drafting path that searches historical reports uploaded by each workspace, using Amazon S3, Bedrock Knowledge Bases, Titan Text Embeddings V2 and S3 Vectors; enforced tenant/modality filters and validated source metadata before generation.
 - Implemented a PostgreSQL SaaS data layer with versioned SQL migrations, non-owner runtime credentials and row-level security for tenant-scoped records.
+- Added a superadmin usage dashboard that tracks actual Bedrock input/output tokens per workspace user and flags unresolved calls without storing prompt/report text or charging customers.
 - Provisioned a dedicated AWS VPC with public ALB subnets, private app and database subnets, NAT egress, private PostgreSQL, and an EC2 Auto Scaling Group capped at four instances.
 - Automated verification, ARM64 Docker image builds, immutable ECR publishing and rolling EC2 deployments through GitHub Actions OIDC, scoped IAM, SSM, ASG refresh and ALB health checks.
 - Integrated Cognito authentication, Secrets Manager runtime configuration, KMS encryption, S3 document storage and DynamoDB ingestion/job metadata.
@@ -39,7 +40,9 @@ Use only bullets you can explain and demonstrate. Replace technical claims with 
 
 > I built RadiologyOS, a multi-tenant radiology reporting workspace that combines structured report workflows with retrieval-augmented AI drafting.
 >
-> The system uses tenant- and modality-filtered retrieval over historical reports stored in Amazon S3, indexed through Amazon Bedrock Knowledge Bases and S3 Vectors. Cognito handles identity, PostgreSQL stores tenant/workflow state with row-level security, and clinicians review generated drafts before finalization.
+> Users upload their historical reports to the tenant-scoped library. For each draft, the system retrieves matching uploaded examples using tenant and modality filters; Amazon Bedrock Knowledge Bases and S3 Vectors provide the indexed search. Cognito handles identity, PostgreSQL stores tenant/workflow state with row-level security, and clinicians review generated drafts before finalization.
+>
+> Superadmins can monitor actual Bedrock input/output token use by user and identify calls whose provider usage could not be confirmed; usage records do not include prompt or report text.
 >
 > I also implemented the AWS delivery platform with Terraform: a dedicated VPC, ALB, private EC2 Auto Scaling tier, private RDS, ECR and GitHub Actions deployments using OIDC and immutable ARM64 images.
 >
@@ -68,11 +71,11 @@ Attach one clear architecture image and two or three sanitized product/pipeline 
 
 ### 3. Build the historical-report RAG path
 
-- Upload one report per document where possible; keep original, normalized and final report prefixes distinguishable in S3.
+- Upload historical reports to the workspace library, preferably one report per file; keep original, normalized and final report prefixes distinguishable in S3.
 - Attach metadata including tenant, modality and study. Treat metadata quality as a prerequisite for relevant retrieval.
 - Ingest the S3 prefixes through Bedrock Knowledge Base data sources.
 - Use Titan Text Embeddings V2 with a vector dimension matching the S3 Vectors index. Current Terraform defaults are 1024 dimensions, 400-token chunks and 15% overlap.
-- Require modality and tenant on every retrieval request, re-check returned source metadata, and avoid cross-modality fallback.
+- At draft time, search the reports previously uploaded to the library. Require modality and tenant on every retrieval request, re-check returned source metadata, and avoid cross-modality fallback.
 - Send retrieved references and the current user instruction to the Bedrock generation model; return a clearly marked draft for human review.
 
 ### 4. Provision cloud infrastructure
@@ -99,6 +102,7 @@ Attach one clear architecture image and two or three sanitized product/pipeline 
 - Confirm unauthorized users cannot edit, sign or invoke AI without the matching capability.
 - Confirm the workflow reports the new image tag, successful instance refresh and healthy target.
 - Inspect safe audit events and model token counters without exposing prompt/report content.
+- Verify the superadmin usage dashboard's per-user Bedrock input/output totals and unresolved-call count; confirm it does not expose prompts or report text.
 
 ## Tech stack
 

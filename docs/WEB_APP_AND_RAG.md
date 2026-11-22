@@ -67,9 +67,9 @@ flowchart LR
 
 ### Ingestion sequence
 
-1. A user with the required workspace access selects a modality and uploads separate DOCX, text-based PDF or TXT reports. The library accepts up to 100 files per batch and 10 MB per file. It validates format, extracts text, checks report suitability and computes a content hash before upload.
+1. A user with the required workspace access selects a modality and uploads historical reports to that workspace's library as separate DOCX, text-based PDF or TXT files. The library accepts up to 100 files per batch and 10 MB per file. It validates format, extracts text, checks report suitability and computes a content hash before upload.
 2. The backend creates a tenant-specific batch and one-hour presigned S3 POST forms. Each form is restricted to a server-generated key and the validated file size. The browser sends the file directly to S3; AWS credentials do not enter the browser.
-3. The background worker reads the uploaded object, verifies exact size and SHA-256, then re-validates and normalizes its text. It writes normalized text and a Bedrock metadata sidecar under the tenant's normalized-report prefix. Original files remain separately stored.
+3. The background worker reads each historical report the user uploaded, verifies exact size and SHA-256, then re-validates and normalizes its text. It writes normalized text and a Bedrock metadata sidecar under the tenant's normalized-report prefix. Original files remain separately stored.
 4. The worker records per-document processing state in DynamoDB and starts or reuses the Bedrock Knowledge Base ingestion job for the data source. A shared ingestion job can contain documents from more than one tenant; the UI reports only the current tenant's document states.
 5. Bedrock reads the S3 data-source prefix, divides normalized text into configured chunks, invokes Titan Text Embeddings V2 and stores vectors plus filterable metadata in S3 Vectors. The Terraform defaults are 400 tokens per chunk and 15% overlap, with a 1024-dimensional embedding index.
 6. The worker reconciles Bedrock's document-level status into `INDEXED` or `FAILED`. A job marked `COMPLETE` is not by itself proof every document indexed; inspect each file's status and error details in Recent batches.
@@ -106,6 +106,8 @@ sequenceDiagram
 
 ### Retrieval safeguards and ranking
 
+When a user asks for a draft, RadiologyOS searches the historical reports already uploaded and indexed for that workspace. It does not fetch examples from a public report corpus. The uploaded reports provide reference examples for the current request, subject to the filters and checks below.
+
 - The backend resolves tenant identity from the authenticated workspace scope, never from a prompt or request-body tenant field.
 - A modality must be selected or identified in the request. A prompt/dropdown conflict is rejected for confirmation. The API does not search across modalities as a fallback.
 - Every Knowledge Base search includes both `tenant_id` and `modality`. The search may first narrow by `study_key` or `body_region`; if that narrower search has no matches, it can relax those optional restrictions while retaining tenant and modality.
@@ -114,11 +116,18 @@ sequenceDiagram
 
 ### Generation behavior and clinical boundary
 
-- Historical reports are examples for report structure, wording, section order and terminology. They are not evidence about the current patient.
+- Matching reports retrieved from the user's uploaded historical library are examples for report structure, wording, section order and terminology. They are not evidence about the current patient.
 - The current prompt is authoritative. The generation instructions prohibit transferring old patient identifiers, measurements, abnormalities, histories or recommendations into a new report. Retrieved documents are treated as untrusted content, not as instructions.
 - Edit requests use the current editor report as the baseline and apply changes while preserving unrelated content. The patient/report chat is scoped to that report and retains bounded recent conversation context according to the configured retention policy.
 - The configured Bedrock model (currently Nova Pro in the documented AWS setup) or explicitly configured supported provider generates a draft from the prompt and retrieved context. The AI feature flag must also be enabled.
 - The generated response is a draft. A qualified radiologist must review clinical facts, measurements, laterality, internal consistency and impression before signing/finalizing. Retrieval relevance is not diagnostic validation.
+
+### AI token usage monitoring
+
+- For Bedrock Converse model calls, the application records provider-reported input, output and total token counts against the authenticated workspace user, workspace and model. Input usage can include system instructions, the current prompt, retrieved report context and conversation history; it is not just the user's typed words.
+- The platform superadmin dashboard displays totals and per-user usage, call counts and unresolved calls. Calls with missing or uncertain provider counters are reported as unresolved and excluded from known token totals rather than treated as zero.
+- Usage events store counters and limited request/model metadata, not the prompt, generated report or retrieved report text. This is an operational usage view, not a complete AWS billing ledger or customer charge system.
+- The current tracker wraps Bedrock Converse calls. Do not claim it tracks every provider path unless the relevant provider has its own verified usage integration.
 
 ## 4. Role-based access control (RBAC)
 
