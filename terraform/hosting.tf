@@ -186,7 +186,14 @@ resource "aws_iam_role" "github_actions_deploy" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
-        StringLike   = { "token.actions.githubusercontent.com:sub" = "repo:${var.github_actions_repository}:ref:refs/heads/main" }
+        StringLike = {
+          # GitHub repositories created after 2026-07-15 include immutable
+          # owner/repository IDs in sub. Keep the legacy form for older repos.
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:${var.github_actions_repository}:ref:refs/heads/main",
+            "repo:${try(split("/", var.github_actions_repository)[0], "")}@*/${try(split("/", var.github_actions_repository)[1], "")}@*:ref:refs/heads/main"
+          ]
+        }
       }
     }]
   })
