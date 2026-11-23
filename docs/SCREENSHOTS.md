@@ -14,9 +14,25 @@ These selected images show the deployed application, historical-report ingestion
 
 ## Application and operations
 
+![RadiologyOS sign-in page with email and hospital employee sign-in options](images/sign-in-page.png)
+
+**Sign-in page.** Shows the authentication entry point for email and hospital employee credentials. The capture contains no entered credentials.
+
+![Platform administrator overview with account, membership, activity, and operations panels](images/admin-overview.png)
+
+**Platform admin panel.** Shows the administrative overview and links into customer management, AI usage visibility, and manual payments.
+
+![Radiologist workspace dashboard with patient and workspace identifiers removed](images/radiologist-workspace.png)
+
+**Radiologist workspace.** Shows the clinical workspace dashboard and report activity panels. User/workspace labels were removed from the screenshot.
+
 ![Workspace dashboard with patient-identifying details excluded](images/workspace-dashboard.png)
 
 **Workspace dashboard.** Application overview metrics; patient-level rows and identifying details are excluded.
+
+![Report editor with the report assistant chat panel open and patient and generated clinical content redacted](images/report-editor-chat-redacted.png)
+
+**Report editor and AI chat.** Shows the report editor beside an assistant response preview. Users can submit findings or instructions in chat and receive a draft to review. Patient and clinical details are redacted; AI output remains a clinician-reviewed draft.
 
 ![Historical report library with 100 selected USG reports marked ready for upload](images/historical-library-validation.png)
 
