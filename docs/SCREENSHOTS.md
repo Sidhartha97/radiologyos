@@ -38,6 +38,10 @@ These selected images show the deployed application, historical-report ingestion
 
 **AI chat output.** Shows the generated draft preview and the option to insert it into the report editor. The image is labeled “Demo data — not a real patient”; generated content remains a clinician-reviewed draft.
 
+![Generated demo report inserted into the report editor](images/ai-report-in-editor-demo.png)
+
+**AI draft inserted into the editor.** Shows the generated report placed in the rich-text report editor, labeled as demo data and not a real patient.
+
 ![Historical report library with 100 selected USG reports marked ready for upload](images/historical-library-validation.png)
 
 **Historical-library validation.** Shows a batch of 100 reference reports validated and ready for upload.
