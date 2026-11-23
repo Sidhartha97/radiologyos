@@ -8,10 +8,6 @@ These selected images show the deployed application, historical-report ingestion
 
 **AWS cloud infrastructure.** Dedicated VPC, public ALB, private EC2 Auto Scaling Group, private PostgreSQL, and connected managed AWS services. This depicts the development deployment; the HTTP listener and single NAT Gateway are documented limitations.
 
-![Report generation workflow from authenticated user request through tenant-filtered historical-report retrieval, Bedrock drafting, and clinician review](images/report-generation-workflow.png)
-
-**Report-generation workflow.** Shows the request path, tenant and modality filtered retrieval from uploaded historical reports, AI drafting, and clinician review before finalization.
-
 ## Application and operations
 
 ![RadiologyOS sign-in page with email and hospital employee sign-in options](images/sign-in-page.png)
