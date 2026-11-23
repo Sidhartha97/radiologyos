@@ -65,4 +65,4 @@ Open `http://localhost:8000/`. Review [docs/SAAS_OPERATIONS.md](docs/SAAS_OPERAT
 
 ## Portfolio screenshots
 
-Use synthetic data. Prioritize: (1) architecture diagram, (2) report editor with fake patient data, (3) assistant draft with retrieval context, (4) modality-aware historical library, (5) role/access workflow, and (6) successful GitHub Actions deployment showing ECR push, ASG refresh and healthy ALB target. See [the screenshot checklist](docs/IMPLEMENTATION_AND_PORTFOLIO.md#screenshot-plan) for sanitization guidance.
+See the [portfolio screenshot gallery](docs/SCREENSHOTS.md) for selected, captioned application and infrastructure images. Use synthetic data in any additional screenshots. See [the screenshot checklist](docs/IMPLEMENTATION_AND_PORTFOLIO.md#screenshot-plan) for capture and sanitization guidance.
