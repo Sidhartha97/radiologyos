@@ -30,9 +30,13 @@ These selected images show the deployed application, historical-report ingestion
 
 **Workspace dashboard.** Application overview metrics; patient-level rows and identifying details are excluded.
 
-![Report editor with the report assistant chat panel open and patient and generated clinical content redacted](images/report-editor-chat-redacted.png)
+![Report editor with the assistant chat open and a sample prompt shown with clinical details redacted](images/ai-chat-input-redacted.png)
 
-**Report editor and AI chat.** Shows the report editor beside an assistant response preview. Users can submit findings or instructions in chat and receive a draft to review. Patient and clinical details are redacted; AI output remains a clinician-reviewed draft.
+**AI chat input.** Shows the report editor beside the prompt composer. Patient details and the actual clinical prompt are redacted.
+
+![Report editor with the assistant's generated draft panel open and clinical report text redacted](images/ai-chat-output-redacted.png)
+
+**AI chat output.** Shows the generated draft preview and the option to insert it into the report editor. Patient and report text are redacted; generated content remains a clinician-reviewed draft.
 
 ![Historical report library with 100 selected USG reports marked ready for upload](images/historical-library-validation.png)
 
